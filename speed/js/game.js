@@ -56,7 +56,7 @@
   const others = new Map(); // pid -> リモートプレイヤー
   let phase = 'lobby'; // lobby | countdown | race | results
   let race = null; // { id, laps, entrants[], goAt, startAt, finishes: Map, firstFinishAt }
-  let lapsSetting = 3;
+  let lapsSetting = 2;
   // mode: north = 北が常に上 / chase = 車の向きに合わせて画面を回転（初期値は操作しやすい追従視点）
   const cam = { x: 0, y: 0, zoom: 0.8, rot: 0, cy: null, mode: 'chase' };
   let easyMode = true; // かんたん操作
@@ -215,7 +215,7 @@
     }
     // 速度に応じてハンドルを切る（低速では曲がりにくく、高速ではやや鈍く）。速いほど切れ角を少し増やす
     const steerFactor =
-      Math.max(-1, Math.min(1, speed0 / (160 * m))) * (1 - Math.min(0.35, (Math.abs(speed0) / (PHYS.boostSpeed * m)) * 0.35));
+      Math.max(-1, Math.min(1, speed0 / (160 * m))) * (1 - Math.min(0.22, (Math.abs(speed0) / (PHYS.boostSpeed * m)) * 0.22));
     me.a += steer * PHYS.steer * Math.sqrt(m) * steerFactor * (input.drift ? 1.25 : 1) * dt;
 
     const fx = Math.cos(me.a), fy = Math.sin(me.a);
@@ -265,7 +265,7 @@
 
   // かんたんモード用：この先のカーブを曲がり切れる速さ（きついカーブの手前で自動的に減速する）
   function cornerSpeed(s, speed, m) {
-    const turnRate = PHYS.steer * Math.sqrt(m) * 0.75 * 0.8; // アシストで無理なく出せる旋回速度（rad/s）
+    const turnRate = PHYS.steer * Math.sqrt(m) * 0.8 * EASY.assist; // アシストだけで出せる旋回速度（rad/s）に余裕を持たせた値
     const reach = 250 + speed * 0.6; // 速いほど先まで見る
     const step = 120;
     let worst = 0;
