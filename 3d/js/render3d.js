@@ -1007,7 +1007,8 @@ export function createRenderer(opts) {
     }
     resizeIfNeeded(st.cover || 0);
 
-    // 車
+    // 車（真上から見る視点では、名札が車に重ならないよう画面上で少し上にずらす）
+    const labelLift = st.camMode === 'chaseTop' || st.camMode === 'north' ? 1.5 : 0.5;
     const seen = new Set();
     const list = st.me ? [Object.assign({ isMe: true }, st.me), ...st.others] : st.others;
     for (const d of list) {
@@ -1018,6 +1019,7 @@ export function createRenderer(opts) {
         cars.set(d.pid, c);
       }
       updateCar(c, d, dt, t);
+      c.label.center.set(0.5, labelLift);
     }
     for (const [pid, c] of cars) {
       if (!seen.has(pid)) {
@@ -1034,7 +1036,8 @@ export function createRenderer(opts) {
       const ratio = Math.min(1.6, speed / Math.max(1, st.maxSpeed));
       let dh = tg.a - camHeading;
       dh = Math.atan2(Math.sin(dh), Math.cos(dh));
-      camHeading += camReady ? dh * (1 - Math.exp(-dt * 5)) : dh;
+      // 上空追従は画面全体が回るので、車の向きに素早く合わせる
+      camHeading += camReady ? dh * (1 - Math.exp(-dt * (st.camMode === 'chaseTop' ? 9 : 5))) : dh;
       const fx = Math.cos(camHeading), fz = Math.sin(camHeading);
       let wantFov;
       if (st.camMode === 'chase') {
@@ -1042,6 +1045,12 @@ export function createRenderer(opts) {
         tmp.set(tg.x - fx * dist, DECK + h, tg.y - fz * dist);
         camLook.set(tg.x + fx * 220, DECK + 14, tg.y + fz * 220);
         wantFov = 60 + 18 * Math.min(1.3, ratio) + (st.boost ? 7 : 0);
+      } else if (st.camMode === 'chaseTop') {
+        // 上空から見下ろしつつ車の向きに合わせて回る（車は画面の下寄り、前方を広く見せる）
+        const h = 820 + ratio * 420, back = 230 + ratio * 110, ahead = 210 + ratio * 170;
+        tmp.set(tg.x - fx * back, DECK + h, tg.y - fz * back);
+        camLook.set(tg.x + fx * ahead, DECK, tg.y + fz * ahead);
+        wantFov = 50 + (st.boost ? 4 : 0);
       } else {
         tmp.set(tg.x, DECK + 2300, tg.y + 950);
         camLook.set(tg.x, DECK, tg.y);

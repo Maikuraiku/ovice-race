@@ -66,9 +66,11 @@
   let easyMode = true; // かんたん操作
   const load = key => { try { return localStorage.getItem(key); } catch (e) { return null; } };
   const save = (key, v) => { try { localStorage.setItem(key, v); } catch (e) {} };
-  // 視点：chase = 3D 追従 / chase2d = 2D 追従（画面が車の向きに回転）/ north = 上空（2D では北が上の固定）
+  // 視点：chase = 3D 追従 / chaseTop = 3D 上空追従（真上寄りから見下ろし、車の向きに回転）
+  //       chase2d = 2D 追従（画面が車の向きに回転）/ north = 上空固定（北が上）
+  const CAM_MODES = ['chase', 'chaseTop', 'chase2d', 'north'];
   const savedCam = load('ovice-3d:cam');
-  if (savedCam === 'north' || savedCam === 'chase2d') cam.mode = savedCam;
+  if (CAM_MODES.includes(savedCam) && savedCam !== 'chase') cam.mode = savedCam;
   // 2D で描くときに車の向きへ画面を回すか
   const chase2D = () => cam.mode === 'chase' || cam.mode === 'chase2d';
   if (load('ovice-3d:control') === 'normal') easyMode = false;
@@ -1033,18 +1035,17 @@
     b.addEventListener('click', () => { setControl(b.dataset.control === 'easy'); b.blur(); })
   );
   setControl(easyMode);
+  const CAM_LABEL = { chase: '🚗 3D追従', chaseTop: '🛸 上空追従', chase2d: '🗺️ 2D追従', north: '🧭 上空固定' };
   function setCamMode(mode) {
     // 3D が使えないときは 2D の追従/固定の 2 種類だけ
-    if (!r3d && mode === 'chase2d') mode = 'chase';
+    if (!r3d && mode !== 'north') mode = 'chase';
     cam.mode = mode;
-    ui.cam.textContent = !r3d
-      ? mode === 'north' ? '🧭 固定視点' : '🚗 追従視点'
-      : mode === 'chase' ? '🚗 3D追従' : mode === 'chase2d' ? '🗺️ 2D追従' : '🛰️ 上空視点';
+    ui.cam.textContent = !r3d ? (mode === 'north' ? '🧭 固定視点' : '🚗 追従視点') : CAM_LABEL[mode];
     document.body.classList.toggle('view2d', !!r3d && mode === 'chase2d');
     save('ovice-3d:cam', mode);
   }
   const nextCamMode = () =>
-    !r3d ? (cam.mode === 'north' ? 'chase' : 'north') : { chase: 'chase2d', chase2d: 'north', north: 'chase' }[cam.mode] || 'chase';
+    !r3d ? (cam.mode === 'north' ? 'chase' : 'north') : CAM_MODES[(CAM_MODES.indexOf(cam.mode) + 1) % CAM_MODES.length];
   ui.cam.addEventListener('click', () => {
     setCamMode(nextCamMode());
     ui.cam.blur();
@@ -1239,7 +1240,7 @@
       r3d = mod.createRenderer({ canvas: $('gl'), labelsBefore: $('mode'), Track, theme, quality });
       window.__r3d = r3d; // デバッグ用
       document.body.classList.add('is3d');
-      setCamMode(savedCam === 'chase2d' ? 'chase2d' : cam.mode);
+      setCamMode(CAM_MODES.includes(savedCam) ? savedCam : cam.mode);
     })
     .catch(err => {
       console.warn('3D 描画を使えないため 2D で表示します', err);
@@ -1279,6 +1280,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, vw, vh);
     if (cam.mode === 'chase') drawSpeedLines(vw / 2, vh * 0.62, -Math.PI / 2, 0.45);
+    else if (cam.mode === 'chaseTop') drawSpeedLines(vw / 2, vh * 0.66, -Math.PI / 2, 0.4);
     drawMinimap();
   }
 
