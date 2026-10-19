@@ -23,6 +23,9 @@
       const qs = new URLSearchParams(location.search);
       const count = Math.min(6, Number(qs.get('n')) || 2);
       const latency = Number(qs.get('lat') || 60);
+      // 実環境で起こりうる状況の再現用
+      const startDelay = Number(qs.get('delay') || 0); // oVice が応答し始めるまでの時間(ms)
+      const noSelf = qs.get('noself') === '1'; // 参加者一覧に isSelf が含まれない
       document.getElementById('lat').textContent = latency;
       const names = ['あおい', 'れん', 'みお', 'はると', 'ゆい', 'そうた'];
       const colors = ['#e91e63', '#3f51b5', '#009688', '#ff9800', '#9c27b0', '#795548'];
@@ -58,13 +61,24 @@
       for (let i = 0; i < count; i++) addUser();
       document.getElementById('add').onclick = addUser;
       const send = (frame, data) => setTimeout(() => frame.iframe.contentWindow && frame.iframe.contentWindow.postMessage(data, '*'), latency);
-      const participant = (u, self) => ({
-        id: String(u.id), name: u.name, avatarUrl: u.avatarUrl, objectId: 'obj-1', objectType: 'static',
-        workspaceId: 1, isHost: false, isSelf: self, isVisitor: false, status: 'subscribed', language: 'ja',
-      });
+      const participant = (u, self) => {
+        const p = {
+          id: String(u.id), name: u.name, avatarUrl: u.avatarUrl, objectId: 'obj-1', objectType: 'static',
+          workspaceId: 1, isHost: false, isSelf: self, isVisitor: false, status: 'subscribed', language: 'ja',
+        };
+        if (noSelf) delete p.isSelf;
+        return p;
+      };
+      const born = Date.now();
       window.addEventListener('message', ev => {
         const from = frames.find(f => f.iframe.contentWindow === ev.source);
         if (!from || !ev.data || !ev.data.type) return;
+        if (Date.now() - born < startDelay) return; // まだ oVice が準備できていない想定
+        if (noSelf && !from.subscribedSent) {
+          // isSelf が無い場合でも、本人向けの subscribed イベントは届く想定
+          from.subscribedSent = true;
+          send(from, { type: 'ovice_participant_subscribed', payload: participant(from.user, true) });
+        }
         const { type, payload } = ev.data;
         if (type === 'ovice_get_participants') {
           send(from, { type: 'ovice_participants', payload: users.map(u => participant(u, u.id === from.user.id)) });

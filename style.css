@@ -53,7 +53,29 @@ button.start {
   font-size: 11px;
   opacity: 0.75;
   text-shadow: 0 1px 2px #000;
-  pointer-events: none;
+  cursor: pointer;
+  z-index: 5;
+}
+.mode::after {
+  content: ' ⓘ';
+}
+.diag {
+  position: fixed;
+  left: 10px;
+  bottom: 28px;
+  z-index: 5;
+  width: min(520px, calc(100% - 20px));
+  max-height: 60%;
+  overflow: auto;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.85);
+  font: 11px/1.5 ui-monospace, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+  -webkit-user-select: text;
 }
 .corner {
   position: fixed;

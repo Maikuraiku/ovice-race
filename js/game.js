@@ -747,8 +747,32 @@
     me.pid = self.pid;
     me.name = self.name;
     me.avatarUrl = self.avatarUrl;
+    lastSend = 0; // 名前が変わったらすぐ知らせる
     updateMode();
+    if (phase === 'lobby') renderLobby();
   });
+  Net.on('mode', updateMode);
+
+  // 接続診断パネル（左下の接続表示をクリックで開閉）
+  const diag = $('diag');
+  function renderDiag() {
+    if (diag.classList.contains('hidden')) return;
+    const self = Net.self;
+    diag.textContent = [
+      `モード: ${Net.mode}`,
+      `自分: ${self.name || '-'} (${self.pid || '-'})`,
+      `oVice 参加者: ${Net.participants.map(p => p.name || '(名前なし)').join(', ') || '-'}`,
+      `ゲーム内で見えている人: ${activeOthers().map(p => p.name).join(', ') || '-'}`,
+      '',
+      ...Net.log,
+    ].join('\n');
+  }
+  ui.mode.addEventListener('click', () => {
+    diag.classList.toggle('hidden');
+    renderDiag();
+  });
+  Net.on('log', renderDiag);
+  setInterval(renderDiag, 1000);
 
   // ---------- 起動 ----------
   window.__race = { me, others, get phase() { return phase; }, get race() { return race; } }; // デバッグ用
