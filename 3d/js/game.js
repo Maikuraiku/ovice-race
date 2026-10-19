@@ -66,7 +66,11 @@
   let easyMode = true; // かんたん操作
   const load = key => { try { return localStorage.getItem(key); } catch (e) { return null; } };
   const save = (key, v) => { try { localStorage.setItem(key, v); } catch (e) {} };
-  if (load('ovice-3d:cam') === 'north') cam.mode = 'north';
+  // 視点：chase = 3D 追従 / chase2d = 2D 追従（画面が車の向きに回転）/ north = 上空（2D では北が上の固定）
+  const savedCam = load('ovice-3d:cam');
+  if (savedCam === 'north' || savedCam === 'chase2d') cam.mode = savedCam;
+  // 2D で描くときに車の向きへ画面を回すか
+  const chase2D = () => cam.mode === 'chase' || cam.mode === 'chase2d';
   if (load('ovice-3d:control') === 'normal') easyMode = false;
   let speedMul = 1; // スピード倍率（0.5〜2.0）。パーティーではホストの設定に揃う
   const savedSpeed = Number(load('ovice-3d:speed'));
@@ -555,7 +559,7 @@
       if (lead) target = { x: lead.rx, y: lead.ry, a: lead.ra, vx: lead.vx, vy: lead.vy, boost: lead.boost };
     }
     // 追従視点では車の進行方向が画面の上を向くように回転させる
-    const wantRot = cam.mode === 'chase' ? -Math.PI / 2 - target.a : 0;
+    const wantRot = chase2D() ? -Math.PI / 2 - target.a : 0;
     let dr = wantRot - cam.rot;
     dr = Math.atan2(Math.sin(dr), Math.cos(dr));
     cam.rot += dr * (1 - Math.exp(-dt * 6));
@@ -893,7 +897,7 @@
     // パネル表示中は、パネルに隠れない上側の領域の中央に自車を映す
     const cover = panelCover();
     // 追従視点では前方が広く見えるよう自車を画面の下寄りに置く
-    const targetCy = (vh - cover) * (cam.mode === 'chase' ? 0.68 : 0.5);
+    const targetCy = (vh - cover) * (chase2D() ? 0.68 : 0.5);
     cam.cy = cam.cy == null ? targetCy : cam.cy + (targetCy - cam.cy) * 0.1;
     const cy = cam.cy;
     // ダッシュ中は小さく揺らす
@@ -1030,16 +1034,23 @@
   );
   setControl(easyMode);
   function setCamMode(mode) {
+    // 3D が使えないときは 2D の追従/固定の 2 種類だけ
+    if (!r3d && mode === 'chase2d') mode = 'chase';
     cam.mode = mode;
-    ui.cam.textContent = mode === 'chase' ? '🚗 追従視点' : r3d ? '🛰️ 上空視点' : '🧭 固定視点';
+    ui.cam.textContent = !r3d
+      ? mode === 'north' ? '🧭 固定視点' : '🚗 追従視点'
+      : mode === 'chase' ? '🚗 3D追従' : mode === 'chase2d' ? '🗺️ 2D追従' : '🛰️ 上空視点';
+    document.body.classList.toggle('view2d', !!r3d && mode === 'chase2d');
     save('ovice-3d:cam', mode);
   }
+  const nextCamMode = () =>
+    !r3d ? (cam.mode === 'north' ? 'chase' : 'north') : { chase: 'chase2d', chase2d: 'north', north: 'chase' }[cam.mode] || 'chase';
   ui.cam.addEventListener('click', () => {
-    setCamMode(cam.mode === 'chase' ? 'north' : 'chase');
+    setCamMode(nextCamMode());
     ui.cam.blur();
   });
   window.addEventListener('keydown', e => {
-    if (e.code === 'KeyV' && !e.repeat && !typing(e)) setCamMode(cam.mode === 'chase' ? 'north' : 'chase');
+    if (e.code === 'KeyV' && !e.repeat && !typing(e)) setCamMode(nextCamMode());
   });
   setCamMode(cam.mode);
   ui.sound.addEventListener('click', () => {
@@ -1191,7 +1202,7 @@
       `oVice 参加者: ${Net.participants.map(p => p.name || '(名前なし)').join(', ') || '-'}`,
       `パーティー: ${Party.state}${Party.code ? ' ' + Party.code : ''}${Party.isHost ? '（ホスト）' : ''} / メンバー: ${Party.members.map(m => m.name).join(', ') || '-'}`,
       `ゲーム内で見えている人: ${activeOthers().map(p => p.name).join(', ') || '-'}`,
-      r3d ? `描画: 3D（画質 ${QUALITY_LABEL[quality]}） ${r3d.fps} fps` : `描画: 2D${r3dError ? '（3D を使えません: ' + r3dError + '）' : ''}`,
+      r3d && cam.mode !== 'chase2d' ? `描画: 3D（画質 ${QUALITY_LABEL[quality]}） ${r3d.fps} fps` : `描画: 2D${r3dError ? '（3D を使えません: ' + r3dError + '）' : ''}`,
       '',
       ...Net.log,
     ].join('\n');
@@ -1228,7 +1239,7 @@
       r3d = mod.createRenderer({ canvas: $('gl'), labelsBefore: $('mode'), Track, theme, quality });
       window.__r3d = r3d; // デバッグ用
       document.body.classList.add('is3d');
-      setCamMode(cam.mode);
+      setCamMode(savedCam === 'chase2d' ? 'chase2d' : cam.mode);
     })
     .catch(err => {
       console.warn('3D 描画を使えないため 2D で表示します', err);
@@ -1273,7 +1284,7 @@
 
   // 重いときは画質を下げる案内を出す
   function checkPerf(t) {
-    if (!r3d || quality === 'low') { ui.perfHint.classList.add('hidden'); return; }
+    if (!r3d || quality === 'low' || cam.mode === 'chase2d') { ui.perfHint.classList.add('hidden'); slowSince = 0; return; }
     if (r3d.fps < 24) { if (!slowSince) slowSince = t; } else slowSince = 0;
     ui.perfHint.classList.toggle('hidden', !(slowSince && t - slowSince > 5000));
   }
@@ -1306,7 +1317,7 @@
   function frame(t) {
     lastFrameAt = now();
     tick(t);
-    if (r3d) {
+    if (r3d && cam.mode !== 'chase2d') {
       try {
         r3d.render(state3d(t, frameDt));
         drawOverlay();
@@ -1325,6 +1336,7 @@
       }
     } else {
       draw(t);
+      ui.perfHint.classList.add('hidden');
     }
     requestAnimationFrame(frame);
   }

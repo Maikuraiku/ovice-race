@@ -25,6 +25,11 @@ canvas {
   width: 100%;
   height: 100%;
 }
+/* 2D 追従視点のときは 3D の画面と名札を隠す */
+body.view2d #gl,
+body.view2d .labels3d {
+  display: none;
+}
 .labels3d {
   position: fixed !important;
   inset: 0;
