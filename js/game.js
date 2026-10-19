@@ -117,7 +117,10 @@
     ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right',
     ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', Space: 'drift',
   };
+  // 入力欄に文字を打っているときはゲーム操作として扱わない
+  const typing = e => e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA');
   window.addEventListener('keydown', e => {
+    if (typing(e)) return;
     const k = KEYMAP[e.code];
     if (k) { keys.add(k); e.preventDefault(); }
     ensureAudio();
@@ -231,12 +234,21 @@
   const someoneRacing = () => activeOthers().some(p => p.phase === 'countdown' || p.phase === 'race');
 
   function requestStart() {
-    if (!me.pid || (phase !== 'lobby' && phase !== 'results') || someoneRacing()) return;
-    const entrants = [me.pid, ...activeOthers().filter(p => p.phase === 'lobby' || p.phase === 'results').map(p => p.pid)].sort();
+    if (!me.pid || !Party.isHost || Party.state !== 'open') return;
+    if ((phase !== 'lobby' && phase !== 'results') || someoneRacing()) return;
+    // パーティーメンバーのうち、レース中でない人全員で走る
+    const entrants = Party.members
+      .map(m => m.pid)
+      .filter(pid => {
+        if (pid === me.pid) return true;
+        const p = others.get(pid);
+        return !p || p.phase === 'lobby' || p.phase === 'results';
+      })
+      .sort();
     const names = {};
     entrants.forEach(pid => (names[pid] = nameOf(pid)));
     const msg = { rid: Date.now().toString(36) + '-' + me.pid, laps: lapsSetting, entrants, names };
-    Net.send('start', msg);
+    Party.send('start', msg);
     beginRace(msg);
   }
 
@@ -258,7 +270,7 @@
     me.finished = true;
     const t = now() - race.startAt;
     recordFinish(me.pid, t);
-    Net.send('finish', { rid: race.id, t });
+    Party.send('finish', { rid: race.id, t });
     beep(988, 0.12); setTimeout(() => beep(1318, 0.3), 130);
   }
 
@@ -309,16 +321,16 @@
     };
   }
   function maybeSend(t) {
-    if (!me.pid) return;
+    if (!me.pid || Party.state !== 'open') return;
     const moving = Math.hypot(me.vx, me.vy) > 3;
     const active = (phase === 'countdown' || phase === 'race') && !me.spectating;
     const interval = active || moving ? 1000 / CFG.sendHz : CFG.idleSendMs;
     if (t - lastSend < interval) return;
     lastSend = t;
-    Net.send('st', stateMsg());
+    Party.send('st', stateMsg());
   }
 
-  Net.on('message', ({ event, data }) => {
+  Party.on('message', ({ event, data }) => {
     const pid = data.pid;
     if (!pid || pid === me.pid) return;
     const t = now();
@@ -339,10 +351,8 @@
       });
       if (race && data.rid === race.id && data.f && !race.finishes.has(pid) && data.ft != null) recordFinish(pid, data.ft);
     } else if (event === 'start') {
-      const canJoin = phase === 'lobby' || phase === 'results';
-      // ほぼ同時に 2 人がスタートを押したら、ID の小さいほうに揃える
-      const override = phase === 'countdown' && race && data.rid < race.id;
-      if (canJoin || override) beginRace(data);
+      // レース開始はホストだけが出せる
+      if (pid === Party.hostPid && (phase === 'lobby' || phase === 'results')) beginRace(data);
     } else if (event === 'finish') {
       if (race && data.rid === race.id) recordFinish(pid, data.t);
     } else if (event === 'bye') {
@@ -350,7 +360,51 @@
     }
   });
 
-  window.addEventListener('pagehide', () => Net.send('bye'));
+  // ---------- パーティー ----------
+  let partyError = '';
+  const openParties = new Map(); // oVice で募集中のパーティー: code -> { code, host, n, at }
+  const myInfo = () => ({ pid: me.pid, name: me.name, av: me.avatarUrl });
+
+  function backToLobby() {
+    phase = 'lobby';
+    race = null;
+    me.spectating = false;
+    me.finished = false;
+    showPanels();
+  }
+
+  Party.on('roster', members => {
+    const ids = new Set(members.map(m => m.pid));
+    for (const pid of others.keys()) if (!ids.has(pid)) others.delete(pid);
+    lastSend = 0; // 新しいメンバーにすぐ自分の位置を知らせる
+    updateMode();
+    renderLobby();
+  });
+  Party.on('left', pid => others.delete(pid));
+  Party.on('state', st => {
+    if (st === 'none') {
+      others.clear();
+      if (phase !== 'lobby') backToLobby();
+    }
+    updateMode();
+    renderLobby();
+  });
+  Party.on('error', msg => {
+    partyError = msg;
+    renderLobby();
+  });
+
+  // ホストは oVice の中継でパーティーを宣伝する（届けば、近くの人の画面に「参加」ボタンが出る）
+  setInterval(() => {
+    if (Party.isHost && Party.state === 'open') {
+      Net.send('party', { code: Party.code, host: me.name, n: Party.members.length });
+    }
+  }, 3000);
+  Net.on('message', ({ event, data }) => {
+    if (event === 'party' && data && /^[A-Z0-9]{4}$/.test(data.code)) {
+      openParties.set(data.code, { code: data.code, host: String(data.host || '???'), n: Number(data.n) || 1, at: now() });
+    }
+  });
 
   // ---------- 更新 ----------
   function update(dt, t) {
@@ -622,6 +676,8 @@
   const ui = {
     hud: $('hud'), lap: $('hudLap'), pos: $('hudPos'), time: $('hudTime'), speed: $('hudSpeed'),
     lobby: $('lobby'), players: $('players'), startBtn: $('startBtn'), lobbyNote: $('lobbyNote'), mode: $('mode'),
+    noParty: $('noParty'), inParty: $('inParty'), openParties: $('openParties'), codeInput: $('codeInput'),
+    codeText: $('codeText'), hostControls: $('hostControls'),
     countdown: $('countdown'), banner: $('banner'), results: $('results'), resultList: $('resultList'),
     focusHint: $('focusHint'), sound: $('soundBtn'), cam: $('camBtn'),
   };
@@ -645,9 +701,41 @@
   $('againBtn').addEventListener('click', e => { e.currentTarget.blur(); requestStart(); });
   $('lobbyBtn').addEventListener('click', e => {
     e.currentTarget.blur();
-    phase = 'lobby';
-    me.spectating = false;
-    showPanels();
+    backToLobby();
+  });
+
+  const doJoin = code => {
+    if (!me.pid) return;
+    partyError = '';
+    Party.join(code, myInfo());
+    renderLobby();
+  };
+  $('createBtn').addEventListener('click', e => {
+    e.currentTarget.blur();
+    if (!me.pid) return;
+    partyError = '';
+    Party.create(myInfo());
+    renderLobby();
+  });
+  $('joinBtn').addEventListener('click', e => { e.currentTarget.blur(); doJoin(ui.codeInput.value); });
+  ui.codeInput.addEventListener('input', () => {
+    ui.codeInput.value = ui.codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+  });
+  ui.codeInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { ui.codeInput.blur(); doJoin(ui.codeInput.value); }
+  });
+  ui.openParties.addEventListener('click', e => {
+    const b = e.target.closest('[data-join]');
+    if (b) doJoin(b.dataset.join);
+  });
+  $('leaveBtn').addEventListener('click', e => { e.currentTarget.blur(); Party.leave(); });
+  $('copyBtn').addEventListener('click', e => {
+    const btn = e.currentTarget;
+    btn.blur();
+    const done = () => { btn.textContent = 'コピー済'; setTimeout(() => (btn.textContent = 'コピー'), 1500); };
+    try {
+      navigator.clipboard.writeText(Party.code).then(done, () => {});
+    } catch (err) {}
   });
   function setCamMode(mode) {
     cam.mode = mode;
@@ -659,7 +747,7 @@
     ui.cam.blur();
   });
   window.addEventListener('keydown', e => {
-    if (e.code === 'KeyV' && !e.repeat) setCamMode(cam.mode === 'chase' ? 'north' : 'chase');
+    if (e.code === 'KeyV' && !e.repeat && !typing(e)) setCamMode(cam.mode === 'chase' ? 'north' : 'chase');
   });
   setCamMode(cam.mode);
   ui.sound.addEventListener('click', () => {
@@ -668,25 +756,66 @@
     ui.sound.blur();
   });
 
+  const setHTML = (el, html) => { if (el.innerHTML !== html) el.innerHTML = html; };
+  const setText = (el, text) => { if (el.textContent !== text) el.textContent = text; };
+
   function renderLobby() {
-    const list = [
-      { pid: me.pid, name: me.name || '接続中…', isMe: true, phase },
-      ...activeOthers().map(p => ({ pid: p.pid, name: p.name, isMe: false, phase: p.phase })),
-    ];
+    const inParty = Party.state !== 'none';
+    ui.noParty.classList.toggle('hidden', inParty);
+    ui.inParty.classList.toggle('hidden', !inParty);
+    ui.lobbyNote.classList.toggle('error', !inParty && !!partyError);
+    $('createBtn').disabled = $('joinBtn').disabled = !me.pid;
+
+    if (!inParty) {
+      const list = [...openParties.values()].filter(p => now() - p.at < 10000);
+      setHTML(
+        ui.openParties,
+        list.length
+          ? '<li class="label">oVice で募集中のパーティー</li>' +
+              list.map(p => `<li><span>${esc(p.host)} のパーティー（${p.n}人）</span><button data-join="${p.code}">参加</button></li>`).join('')
+          : ''
+      );
+      setText(ui.lobbyNote, partyError || 'パーティーを作ってコードを伝えるか、教えてもらったコードを入力して参加してください。');
+      return;
+    }
+
+    setText(ui.codeText, Party.code);
+    if (Party.state === 'connecting') {
+      setHTML(ui.players, '');
+      ui.hostControls.classList.add('hidden');
+      setText(ui.lobbyNote, Party.isHost ? 'パーティーを作成中…' : '接続中…');
+      return;
+    }
     const tag = ph => (ph === 'race' || ph === 'countdown' ? '<span class="tag busy">レース中</span>' : ph === 'results' ? '<span class="tag">結果画面</span>' : '');
-    ui.players.innerHTML = list
-      .map(p => `<li><i style="background:${colorOf(p.pid)}"></i>${esc(p.name)}${p.isMe ? ' <small>(あなた)</small>' : ''}${tag(p.phase)}</li>`)
-      .join('');
+    setHTML(
+      ui.players,
+      Party.members
+        .map(m => {
+          const isMe = m.pid === me.pid;
+          const ph = isMe ? phase : (others.get(m.pid) || {}).phase;
+          const crown = m.pid === Party.hostPid ? '<span class="crown" title="ホスト">👑</span>' : '';
+          return `<li><i style="background:${colorOf(m.pid)}"></i>${crown}${esc(isMe ? me.name : m.name)}${isMe ? ' <small>(あなた)</small>' : ''}${tag(ph)}</li>`;
+        })
+        .join('')
+    );
+    ui.hostControls.classList.toggle('hidden', !Party.isHost);
     const busy = someoneRacing();
-    ui.startBtn.disabled = !me.pid || busy;
-    ui.lobbyNote.textContent = busy
-      ? '他のプレイヤーがレース中です。終わると参加できます。'
-      : list.length === 1
-        ? '一人でもタイムアタックできます。近くの人がオブジェクトに入ると一緒に走れます。'
-        : `ロビーにいる ${list.length} 人でレースします。`;
+    ui.startBtn.disabled = busy;
+    setText(
+      ui.lobbyNote,
+      !Party.isHost
+        ? 'ホストがレースを始めるのを待っています。待っている間は練習走行できます。'
+        : busy
+          ? 'まだレース中のメンバーがいます。終わるまでお待ちください。'
+          : Party.members.length === 1
+            ? 'コードを伝えて仲間を呼びましょう（一人でもタイムアタックできます）。'
+            : `${Party.members.length} 人でレースします。`
+    );
   }
 
   function renderResults() {
+    $('againBtn').classList.toggle('hidden', !Party.isHost);
+    setText($('resultNote'), Party.isHost ? '' : 'ホストが次のレースを始めるのを待っています。');
     ui.resultList.innerHTML = standings()
       .map((s, i) => {
         const time = s.time != null ? fmtTime(s.time) : s.gone ? '退出' : 'DNF';
@@ -735,12 +864,14 @@
   }
 
   function updateMode() {
-    ui.mode.textContent =
-      Net.mode === 'ovice'
-        ? `oVice 接続中：${me.name}`
-        : Net.mode === 'local'
-          ? `ローカルテスト：${me.name}（同じブラウザの別タブと対戦）`
-          : '接続中…';
+    const who = Net.mode === 'ovice' ? `oVice：${me.name}` : Net.mode === 'local' ? me.name : '接続中…';
+    const party =
+      Party.state === 'open'
+        ? `　パーティー ${Party.code}（${Party.members.length}人）`
+        : Party.state === 'connecting'
+          ? '　パーティー接続中…'
+          : '';
+    ui.mode.textContent = who + party;
   }
 
   Net.on('self', self => {
@@ -748,6 +879,7 @@
     me.name = self.name;
     me.avatarUrl = self.avatarUrl;
     lastSend = 0; // 名前が変わったらすぐ知らせる
+    if (Party.state !== 'none') Party.updateSelf(myInfo());
     updateMode();
     if (phase === 'lobby') renderLobby();
   });
@@ -762,6 +894,7 @@
       `モード: ${Net.mode}`,
       `自分: ${self.name || '-'} (${self.pid || '-'})`,
       `oVice 参加者: ${Net.participants.map(p => p.name || '(名前なし)').join(', ') || '-'}`,
+      `パーティー: ${Party.state}${Party.code ? ' ' + Party.code : ''}${Party.isHost ? '（ホスト）' : ''} / メンバー: ${Party.members.map(m => m.name).join(', ') || '-'}`,
       `ゲーム内で見えている人: ${activeOthers().map(p => p.name).join(', ') || '-'}`,
       '',
       ...Net.log,
@@ -790,13 +923,23 @@
   setInterval(() => maybeSend(now()), 1000);
 
   let last = now();
-  function frame(t) {
-    const dt = Math.min(0.05, (t - last) / 1000);
+  let lastFrameAt = now();
+  function tick(t) {
+    const dt = Math.min(0.05, Math.max(0, t - last) / 1000);
     last = t;
     update(dt, t);
-    draw(t);
     updateHud(t);
+  }
+  function frame(t) {
+    lastFrameAt = now();
+    tick(t);
+    draw(t);
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+  // 画面が隠れて requestAnimationFrame が止まっても、カウントダウンや結果判定・位置送信は進める
+  setInterval(() => {
+    const t = now();
+    if (t - lastFrameAt > 250) tick(t);
+  }, 100);
 })();

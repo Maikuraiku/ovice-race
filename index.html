@@ -28,13 +28,30 @@
 
     <section id="lobby" class="panel">
       <h1>🏁 oVice Racing</h1>
-      <ul id="players" class="players"></ul>
-      <div class="row">
-        <span>周回数</span>
-        <button data-laps="1">1</button>
-        <button data-laps="3" class="sel">3</button>
-        <button data-laps="5">5</button>
-        <button id="startBtn" class="start">レース開始</button>
+      <div id="noParty">
+        <div class="row">
+          <button id="createBtn" class="primary">パーティーを作る</button>
+          <span class="or">または</span>
+          <input id="codeInput" class="code-input" maxlength="4" placeholder="コード" autocomplete="off" spellcheck="false" />
+          <button id="joinBtn">参加</button>
+        </div>
+        <ul id="openParties" class="parties"></ul>
+      </div>
+      <div id="inParty" class="hidden">
+        <div class="row code-row">
+          <span>パーティーコード</span>
+          <b id="codeText" class="code">----</b>
+          <button id="copyBtn">コピー</button>
+          <button id="leaveBtn" class="leave">抜ける</button>
+        </div>
+        <ul id="players" class="players"></ul>
+        <div id="hostControls" class="row hidden">
+          <span>周回数</span>
+          <button data-laps="1">1</button>
+          <button data-laps="3" class="sel">3</button>
+          <button data-laps="5">5</button>
+          <button id="startBtn" class="start">レース開始</button>
+        </div>
       </div>
       <p id="lobbyNote" class="note"></p>
       <p class="keys">
@@ -46,6 +63,7 @@
     <section id="results" class="panel hidden">
       <h1>🏆 リザルト</h1>
       <ol id="resultList" class="results"></ol>
+      <p id="resultNote" class="note"></p>
       <div class="row">
         <button id="againBtn" class="start">もう一度レース</button>
         <button id="lobbyBtn">ロビーへ</button>
@@ -66,8 +84,10 @@
       </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
     <script src="js/net.js"></script>
     <script src="js/track.js"></script>
+    <script src="js/party.js"></script>
     <script src="js/game.js"></script>
   </body>
 </html>
