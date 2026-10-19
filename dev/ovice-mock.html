@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>oVice モック（動作確認用）</title>
+    <style>
+      body { margin: 0; font-family: system-ui, sans-serif; background: #222; color: #eee; }
+      header { padding: 6px 10px; font-size: 13px; }
+      #grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 6px; padding: 6px; }
+      .cell { background: #000; }
+      .cell div { font-size: 12px; padding: 2px 6px; }
+      iframe { width: 100%; height: 380px; border: 0; display: block; }
+    </style>
+  </head>
+  <body>
+    <header>
+      oVice の親ウィンドウを模したテストページ。各 iframe が別ユーザーとして接続し、ovice_broadcast_message を他の iframe に中継します（遅延 <span id="lat"></span>ms、送信者へのエコーあり）。
+      ?n=人数&amp;lat=遅延ms
+      <button id="add">＋ 参加者を追加</button>
+    </header>
+    <div id="grid"></div>
+    <script>
+      const qs = new URLSearchParams(location.search);
+      const count = Math.min(6, Number(qs.get('n')) || 2);
+      const latency = Number(qs.get('lat') || 60);
+      document.getElementById('lat').textContent = latency;
+      const names = ['あおい', 'れん', 'みお', 'はると', 'ゆい', 'そうた'];
+      const colors = ['#e91e63', '#3f51b5', '#009688', '#ff9800', '#9c27b0', '#795548'];
+      const avatarUrl = i =>
+        'data:image/svg+xml,' +
+        encodeURIComponent(
+          `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="${colors[i]}"/><text x="32" y="44" font-size="34" text-anchor="middle" fill="#fff">${names[i][0]}</text></svg>`
+        );
+      const users = [];
+      let frames = [];
+      let next = 0;
+      function addUser() {
+        const i = next++;
+        if (i >= names.length) return;
+        const u = { id: 1001 + i, name: names[i], avatarUrl: avatarUrl(i) };
+        users.push(u);
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.innerHTML = `<div>${u.name}（id ${u.id}） <button>退出</button></div>`;
+        const iframe = document.createElement('iframe');
+        iframe.src = '../index.html';
+        cell.appendChild(iframe);
+        document.getElementById('grid').appendChild(cell);
+        const frame = { user: u, iframe };
+        frames.push(frame);
+        // 範囲外に出た扱い：iframe ごと消える
+        cell.querySelector('button').onclick = () => {
+          cell.remove();
+          frames = frames.filter(f => f !== frame);
+          users.splice(users.indexOf(u), 1);
+        };
+      }
+      for (let i = 0; i < count; i++) addUser();
+      document.getElementById('add').onclick = addUser;
+      const send = (frame, data) => setTimeout(() => frame.iframe.contentWindow && frame.iframe.contentWindow.postMessage(data, '*'), latency);
+      const participant = (u, self) => ({
+        id: String(u.id), name: u.name, avatarUrl: u.avatarUrl, objectId: 'obj-1', objectType: 'static',
+        workspaceId: 1, isHost: false, isSelf: self, isVisitor: false, status: 'subscribed', language: 'ja',
+      });
+      window.addEventListener('message', ev => {
+        const from = frames.find(f => f.iframe.contentWindow === ev.source);
+        if (!from || !ev.data || !ev.data.type) return;
+        const { type, payload } = ev.data;
+        if (type === 'ovice_get_participants') {
+          send(from, { type: 'ovice_participants', payload: users.map(u => participant(u, u.id === from.user.id)) });
+        } else if (type === 'ovice_broadcast_message') {
+          const msg = { type: 'ovice_message', payload: { source: String(from.user.id), event: payload.event, objectId: 'obj-1', message: payload.message } };
+          frames.forEach(f => send(f, msg));
+        } else if (type === 'ovice_emit_message') {
+          const to = frames.find(f => String(f.user.id) === String(payload.to));
+          if (to) send(to, { type: 'ovice_message', payload: { source: String(from.user.id), event: payload.event, objectId: 'obj-1', message: payload.message, to: payload.to } });
+        }
+      });
+    </script>
+  </body>
+</html>
