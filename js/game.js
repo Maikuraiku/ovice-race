@@ -15,6 +15,13 @@
     maxSpeed: 620, grassMax: 240, boostSpeed: 950, boostTime: 1.0,
     steer: 2.7, grip: 7.5, driftGrip: 1.6,
   };
+  // かんたんモード：自動アクセル・ハンドルアシスト・滑りにくい・壁や芝生で失速しにくい
+  const EASY = {
+    maxSpeed: 560, grassMax: 360, grassDrag: 0.6, grip: 12,
+    assist: 0.65, // 何も押していないときに、コースに沿うよう自動で切るハンドルの強さ
+    assistWithInput: 0.3, // 自分でハンドルを切っているときに足すアシストの強さ
+    steerRamp: 9, // ハンドルの効き始めをなめらかにする
+  };
   const COLORS = ['#e53935', '#1e88e5', '#fdd835', '#43a047', '#8e24aa', '#fb8c00', '#00acc1', '#ec407a', '#8d6e63', '#eceff1'];
   const L = Track.length;
   const $ = id => document.getElementById(id);
@@ -40,17 +47,19 @@
     pid: null, name: '', avatarUrl: '',
     x: 0, y: 0, a: 0, vx: 0, vy: 0,
     sPrev: 0, total: 0, boost: 0,
-    finished: false, spectating: false, offTrack: false,
+    finished: false, spectating: false, offTrack: false, steer: 0,
   };
   const others = new Map(); // pid -> リモートプレイヤー
   let phase = 'lobby'; // lobby | countdown | race | results
   let race = null; // { id, laps, entrants[], goAt, startAt, finishes: Map, firstFinishAt }
   let lapsSetting = 3;
-  // mode: north = 北が常に上 / chase = 車の向きに合わせて画面を回転
-  const cam = { x: 0, y: 0, zoom: 0.8, rot: 0, cy: null, mode: 'north' };
-  try {
-    if (localStorage.getItem('ovice-race:cam') === 'chase') cam.mode = 'chase';
-  } catch (e) {}
+  // mode: north = 北が常に上 / chase = 車の向きに合わせて画面を回転（初期値は操作しやすい追従視点）
+  const cam = { x: 0, y: 0, zoom: 0.8, rot: 0, cy: null, mode: 'chase' };
+  let easyMode = true; // かんたん操作
+  const load = key => { try { return localStorage.getItem(key); } catch (e) { return null; } };
+  const save = (key, v) => { try { localStorage.setItem(key, v); } catch (e) {} };
+  if (load('ovice-race:cam2') === 'north') cam.mode = 'north';
+  if (load('ovice-race:control') === 'normal') easyMode = false;
 
   const hash = s => {
     let h = 0;
@@ -162,31 +171,48 @@
     me.finished = false;
   }
 
-  function stepCar(dt, input) {
+  function stepCar(dt, input, autoAccel) {
     const speed0 = me.vx * Math.cos(me.a) + me.vy * Math.sin(me.a);
+    const n0 = Track.nearest(me.x, me.y);
+    me.offTrack = n0.dist > Track.width / 2 + 6;
+
+    let steer = input.steer;
+    if (easyMode) {
+      // ハンドルアシスト：少し先のコース上の点へ向かうように切る
+      if (speed0 > 30) {
+        const p = Track.pointAt(n0.s + 140 + speed0 * 0.35);
+        let da = Math.atan2(p.y - me.y, p.x - me.x) - me.a;
+        da = Math.atan2(Math.sin(da), Math.cos(da));
+        const auto = Math.max(-1, Math.min(1, da * 2.2));
+        steer = input.steer !== 0 ? Math.max(-1, Math.min(1, input.steer + auto * EASY.assistWithInput)) : auto * EASY.assist;
+      }
+      // キーを押した瞬間に急に曲がらないよう、ハンドル量をなめらかに変える
+      me.steer += (steer - me.steer) * Math.min(1, dt * EASY.steerRamp);
+      steer = me.steer;
+    }
     // 速度に応じてハンドルを切る（低速では曲がりにくく、高速ではやや鈍く）
     const steerFactor = Math.max(-1, Math.min(1, speed0 / 160)) * (1 - Math.min(0.35, (Math.abs(speed0) / PHYS.boostSpeed) * 0.35));
-    me.a += input.steer * PHYS.steer * steerFactor * (input.drift ? 1.25 : 1) * dt;
+    me.a += steer * PHYS.steer * steerFactor * (input.drift ? 1.25 : 1) * dt;
 
     const fx = Math.cos(me.a), fy = Math.sin(me.a);
     let fv = me.vx * fx + me.vy * fy; // 前後方向の速度
     let lv = -me.vx * fy + me.vy * fx; // 横滑り速度
 
-    const n0 = Track.nearest(me.x, me.y);
-    me.offTrack = n0.dist > Track.width / 2 + 6;
     const boosting = me.boost > 0;
-    const maxV = boosting ? PHYS.boostSpeed : me.offTrack ? PHYS.grassMax : PHYS.maxSpeed;
+    const maxV = boosting ? PHYS.boostSpeed : me.offTrack ? (easyMode ? EASY.grassMax : PHYS.grassMax) : easyMode ? EASY.maxSpeed : PHYS.maxSpeed;
+    // かんたんモードのレース中は、ブレーキを踏んでいなければ自動でアクセル
+    input = Object.assign({}, input, { up: input.up || (autoAccel && easyMode && !input.down) });
 
     if (input.up) fv += PHYS.accel * (boosting ? 1.8 : 1) * dt;
     if (input.down) fv -= (fv > 0 ? PHYS.brake : PHYS.accel * 0.6) * dt;
     if (!input.up && !input.down) fv -= Math.sign(fv) * Math.min(Math.abs(fv), PHYS.coast * dt);
     if (input.drift) fv -= fv * 0.5 * dt;
     fv -= fv * PHYS.drag * dt;
-    if (me.offTrack) fv -= fv * 1.6 * dt;
+    if (me.offTrack) fv -= fv * (easyMode ? EASY.grassDrag : 1.6) * dt;
     if (fv > maxV) fv = Math.max(maxV, fv - 1100 * dt);
     if (fv < -PHYS.reverseMax) fv = -PHYS.reverseMax;
 
-    const grip = input.drift ? PHYS.driftGrip : me.offTrack ? 4 : PHYS.grip;
+    const grip = input.drift ? PHYS.driftGrip : me.offTrack ? (easyMode ? 8 : 4) : easyMode ? EASY.grip : PHYS.grip;
     lv *= Math.exp(-grip * dt);
 
     me.vx = fx * fv - fy * lv;
@@ -202,8 +228,14 @@
       me.x = n.px + nx * limit;
       me.y = n.py + ny * limit;
       const vn = me.vx * nx + me.vy * ny;
-      if (vn > 0) { me.vx -= nx * vn * 1.4; me.vy -= ny * vn * 1.4; }
-      me.vx *= 0.85; me.vy *= 0.85;
+      if (easyMode) {
+        // かんたんモードでは壁に沿って滑るだけで、ほとんど減速しない
+        if (vn > 0) { me.vx -= nx * vn; me.vy -= ny * vn; }
+        me.vx *= 0.97; me.vy *= 0.97;
+      } else {
+        if (vn > 0) { me.vx -= nx * vn * 1.4; me.vy -= ny * vn * 1.4; }
+        me.vx *= 0.85; me.vy *= 0.85;
+      }
     }
 
     // ダッシュパネル
@@ -421,7 +453,7 @@
 
     if (!me.spectating && me.pid) {
       const canDrive = phase === 'lobby' || phase === 'results' || (phase === 'race' && !me.finished);
-      const n = stepCar(dt, canDrive ? readInput() : NO_INPUT);
+      const n = stepCar(dt, canDrive ? readInput() : NO_INPUT, phase === 'race' && !me.finished);
       trackProgress(n);
       if (phase === 'race' && !me.finished && me.total >= race.laps * L) myFinish();
     }
@@ -737,10 +769,22 @@
       navigator.clipboard.writeText(Party.code).then(done, () => {});
     } catch (err) {}
   });
+  function setControl(easy) {
+    easyMode = easy;
+    save('ovice-race:control', easy ? 'easy' : 'normal');
+    document.querySelectorAll('[data-control]').forEach(b => b.classList.toggle('sel', (b.dataset.control === 'easy') === easy));
+    $('controlHelp').textContent = easy
+      ? 'かんたん：レース中は自動でアクセル。ハンドルはアシスト付きで、壁や芝生でも失速しにくい。'
+      : 'ふつう：アクセル・ハンドルを自分で操作。アシストなしで最高速が少し速い。';
+  }
+  document.querySelectorAll('[data-control]').forEach(b =>
+    b.addEventListener('click', () => { setControl(b.dataset.control === 'easy'); b.blur(); })
+  );
+  setControl(easyMode);
   function setCamMode(mode) {
     cam.mode = mode;
     ui.cam.textContent = mode === 'chase' ? '🚗 追従視点' : '🧭 固定視点';
-    try { localStorage.setItem('ovice-race:cam', mode); } catch (e) {}
+    save('ovice-race:cam2', mode);
   }
   ui.cam.addEventListener('click', () => {
     setCamMode(cam.mode === 'chase' ? 'north' : 'chase');
