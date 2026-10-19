@@ -12,12 +12,12 @@
   };
   const PHYS = {
     accel: 520, brake: 950, coast: 120, drag: 0.32, reverseMax: 170,
-    maxSpeed: 620, grassMax: 240, boostSpeed: 950, boostTime: 1.0,
+    maxSpeed: 680, grassMax: 240, boostSpeed: 950, boostTime: 1.0,
     steer: 2.7, grip: 7.5, driftGrip: 1.6,
   };
-  // かんたんモード：自動アクセル・ハンドルアシスト・滑りにくい・壁や芝生で失速しにくい
+  // かんたんモード：ハンドルアシスト・滑りにくい・壁や芝生で失速しにくい
   const EASY = {
-    maxSpeed: 560, grassMax: 360, grassDrag: 0.6, grip: 12,
+    maxSpeed: 620, grassMax: 380, grassDrag: 0.6, grip: 12,
     assist: 0.65, // 何も押していないときに、コースに沿うよう自動で切るハンドルの強さ
     assistWithInput: 0.3, // 自分でハンドルを切っているときに足すアシストの強さ
     steerRamp: 9, // ハンドルの効き始めをなめらかにする
@@ -161,8 +161,8 @@
     const row = Math.floor(slot / 2), side = slot % 2 === 0 ? -1 : 1;
     const s = -70 - row * 80;
     const p = Track.pointAt(s);
-    me.x = p.x + -p.ty * side * 45;
-    me.y = p.y + p.tx * side * 45;
+    me.x = p.x + -p.ty * side * 70;
+    me.y = p.y + p.tx * side * 70;
     me.a = Math.atan2(p.ty, p.tx);
     me.vx = me.vy = 0;
     me.total = s;
@@ -171,7 +171,7 @@
     me.finished = false;
   }
 
-  function stepCar(dt, input, autoAccel) {
+  function stepCar(dt, input) {
     const speed0 = me.vx * Math.cos(me.a) + me.vy * Math.sin(me.a);
     const n0 = Track.nearest(me.x, me.y);
     me.offTrack = n0.dist > Track.width / 2 + 6;
@@ -200,8 +200,6 @@
 
     const boosting = me.boost > 0;
     const maxV = boosting ? PHYS.boostSpeed : me.offTrack ? (easyMode ? EASY.grassMax : PHYS.grassMax) : easyMode ? EASY.maxSpeed : PHYS.maxSpeed;
-    // かんたんモードのレース中は、ブレーキを踏んでいなければ自動でアクセル
-    input = Object.assign({}, input, { up: input.up || (autoAccel && easyMode && !input.down) });
 
     if (input.up) fv += PHYS.accel * (boosting ? 1.8 : 1) * dt;
     if (input.down) fv -= (fv > 0 ? PHYS.brake : PHYS.accel * 0.6) * dt;
@@ -453,7 +451,7 @@
 
     if (!me.spectating && me.pid) {
       const canDrive = phase === 'lobby' || phase === 'results' || (phase === 'race' && !me.finished);
-      const n = stepCar(dt, canDrive ? readInput() : NO_INPUT, phase === 'race' && !me.finished);
+      const n = stepCar(dt, canDrive ? readInput() : NO_INPUT);
       trackProgress(n);
       if (phase === 'race' && !me.finished && me.total >= race.laps * L) myFinish();
     }
@@ -490,7 +488,7 @@
     cam.x += (target.x - cam.x) * ck;
     cam.y += (target.y - cam.y) * ck;
     const spd = Math.hypot(target.vx || 0, target.vy || 0);
-    const baseZoom = Math.max(0.35, Math.min(1.0, Math.min(vw, vh) / 860));
+    const baseZoom = Math.max(0.3, Math.min(0.9, Math.min(vw, vh) / 980));
     const wantZoom = baseZoom * (1 - Math.min(0.22, (spd / PHYS.boostSpeed) * 0.22));
     cam.zoom += (wantZoom - cam.zoom) * (1 - Math.exp(-dt * 2));
   }
@@ -774,7 +772,7 @@
     save('ovice-race:control', easy ? 'easy' : 'normal');
     document.querySelectorAll('[data-control]').forEach(b => b.classList.toggle('sel', (b.dataset.control === 'easy') === easy));
     $('controlHelp').textContent = easy
-      ? 'かんたん：レース中は自動でアクセル。ハンドルはアシスト付きで、壁や芝生でも失速しにくい。'
+      ? 'かんたん：ハンドルはアシスト付きで、壁や芝生でも失速しにくい。'
       : 'ふつう：アクセル・ハンドルを自分で操作。アシストなしで最高速が少し速い。';
   }
   document.querySelectorAll('[data-control]').forEach(b =>
