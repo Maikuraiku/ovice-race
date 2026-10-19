@@ -46,7 +46,7 @@
         cell.className = 'cell';
         cell.innerHTML = `<div>${u.name}（id ${u.id}） <button>退出</button></div>`;
         const iframe = document.createElement('iframe');
-        iframe.src = '../index.html';
+        iframe.src = qs.get('app') || '../index.html';
         cell.appendChild(iframe);
         document.getElementById('grid').appendChild(cell);
         const frame = { user: u, iframe };
