@@ -4,6 +4,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
     <title>oVice Racing 3D</title>
+    <script>
+      // oVice などが古いページを覚えていても、公開中の最新版に自動で切り替える
+      (function () {
+        var CURRENT = '2026.10.20-3';
+        try {
+          fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+              if (!d || !d.v || d.v === CURRENT) return;
+              var u = new URL(location.href);
+              if (u.searchParams.get('v') === d.v) return; // 切り替え済み（配信が追いつくのを待つ）
+              u.searchParams.set('v', d.v);
+              location.replace(u.href);
+            })
+            .catch(function () {});
+        } catch (e) {}
+      })();
+    </script>
     <script type="importmap">
       {
         "imports": {
@@ -13,7 +31,7 @@
       }
     </script>
     <!-- 更新のたびに ?v= を変えて、oVice などに残った古いファイルを使わせない -->
-    <link rel="stylesheet" href="style.css?v=2026.10.20-2" />
+    <link rel="stylesheet" href="style.css?v=2026.10.20-3" />
   </head>
   <body>
     <canvas id="gl"></canvas>
@@ -117,9 +135,9 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-    <script src="js/net.js?v=2026.10.20-2"></script>
-    <script src="js/track.js?v=2026.10.20-2"></script>
-    <script src="js/party.js?v=2026.10.20-2"></script>
-    <script src="js/game.js?v=2026.10.20-2"></script>
+    <script src="js/net.js?v=2026.10.20-3"></script>
+    <script src="js/track.js?v=2026.10.20-3"></script>
+    <script src="js/party.js?v=2026.10.20-3"></script>
+    <script src="js/game.js?v=2026.10.20-3"></script>
   </body>
 </html>
