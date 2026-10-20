@@ -77,7 +77,14 @@
   let speedMul = 1; // スピード倍率（0.5〜2.0）。パーティーではホストの設定に揃う
   const savedSpeed = Number(load('ovice-3d:speed'));
   if (savedSpeed >= 0.5 && savedSpeed <= 2) speedMul = savedSpeed;
-  let theme = load('ovice-3d:theme') === 'morning' ? 'morning' : 'night';
+  // テーマ：夜 / 朝 / エアロ晴天 / 放課後の夕暮れ / 深夜の蛍光灯
+  const THEME_ORDER = ['night', 'morning', 'aero', 'dusk', 'midnight'];
+  const THEME_LABEL = { night: '🌙 夜', morning: '☀️ 朝', aero: '🫧 エアロ晴天', dusk: '🌆 放課後の夕暮れ', midnight: '🏢 深夜の蛍光灯' };
+  const THEME_SHORT = { night: '夜', morning: '朝', aero: 'エアロ晴天', dusk: '夕暮れ', midnight: '深夜' };
+  // 2D 表示では、近い雰囲気の夜/朝の描き方を使う
+  const THEME_2D = { aero: 'morning', dusk: 'night', midnight: 'night' };
+  let theme = THEME_ORDER.includes(load('ovice-3d:theme')) ? load('ovice-3d:theme') : 'night';
+  const theme2d = () => (theme === 'night' || theme === 'morning' ? theme : THEME_2D[theme]);
 
   const hash = s => {
     let h = 0;
@@ -122,8 +129,92 @@
   function ensureAudio() {
     if (!audio) {
       try { audio = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+      setAmbient();
     }
     if (audio.state === 'suspended') audio.resume();
+  }
+  // 新しいテーマの環境音（WebAudio で合成。既存の曲は使わない）
+  const AMBIENT = {
+    aero: { notes: [261.63, 329.63, 392.0, 493.88, 587.33], type: 'sine', cutoff: 2600, vol: 0.02, noise: 0.006, noiseFreq: 520, lfo: 0.07 },
+    dusk: { notes: [174.61, 220.0, 261.63, 329.63], type: 'sawtooth', cutoff: 650, vol: 0.014, noise: 0.004, noiseFreq: 300, lfo: 0.05 },
+    midnight: { notes: [55, 110, 164.81], type: 'triangle', cutoff: 420, vol: 0.02, noise: 0.002, noiseFreq: 240, lfo: 0.03, buzz: 0.004 },
+  };
+  let ambient = null;
+  function setAmbient() {
+    if (!audio) return;
+    const cfg = soundOn ? AMBIENT[theme] : null;
+    const now0 = audio.currentTime;
+    if (ambient) {
+      const old = ambient;
+      old.gain.gain.cancelScheduledValues(now0);
+      old.gain.gain.setTargetAtTime(0, now0, 0.5);
+      setTimeout(() => old.nodes.forEach(n => { try { n.stop(); } catch (e) {} }), 3000);
+      ambient = null;
+    }
+    if (!cfg) return;
+    const gain = audio.createGain();
+    gain.gain.value = 0;
+    gain.connect(audio.destination);
+    const filter = audio.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = cfg.cutoff;
+    filter.connect(gain);
+    const nodes = [];
+    cfg.notes.forEach((f, i) => {
+      for (const det of [-5, 5]) {
+        const o = audio.createOscillator();
+        o.type = cfg.type;
+        o.frequency.value = f;
+        o.detune.value = det + i;
+        const g = audio.createGain();
+        g.gain.value = 1 / (cfg.notes.length * 2);
+        // ゆっくり音量を揺らして、漂う感じにする
+        const lfo = audio.createOscillator();
+        lfo.frequency.value = cfg.lfo * (1 + i * 0.37);
+        const lg = audio.createGain();
+        lg.gain.value = g.gain.value * 0.6;
+        lfo.connect(lg).connect(g.gain);
+        o.connect(g).connect(filter);
+        o.start();
+        lfo.start();
+        nodes.push(o, lfo);
+      }
+    });
+    // 遠くの波や空調のような音
+    if (cfg.noise) {
+      const buf = audio.createBuffer(1, audio.sampleRate * 2, audio.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      const src = audio.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      const bp = audio.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = cfg.noiseFreq;
+      bp.Q.value = 0.6;
+      const ng = audio.createGain();
+      ng.gain.value = cfg.noise / cfg.vol;
+      src.connect(bp).connect(ng).connect(gain);
+      src.start();
+      nodes.push(src);
+    }
+    // 蛍光灯のかすかなうなり
+    if (cfg.buzz) {
+      const o = audio.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.value = 120;
+      const bp = audio.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1800;
+      bp.Q.value = 4;
+      const g = audio.createGain();
+      g.gain.value = cfg.buzz / cfg.vol;
+      o.connect(bp).connect(g).connect(gain);
+      o.start();
+      nodes.push(o);
+    }
+    gain.gain.setTargetAtTime(cfg.vol, now0, 1.5);
+    ambient = { gain, nodes };
   }
   function beep(freq, dur = 0.15, vol = 0.06, type = 'square') {
     if (!soundOn || !audio) return;
@@ -650,14 +741,14 @@
   const inView = (x, y, view, r) => x + r > view.x0 && x - r < view.x1 && y + r > view.y0 && y - r < view.y1;
 
   function drawScene(t, view) {
-    const th = THEMES[theme];
+    const th = THEMES[theme2d()];
     const W = Track.width, M = Track.margin;
 
     // 海（ゆっくり流れる）
     ctx.save();
     const ox = (t * 0.02) % 512, oy = (t * 0.011) % 512;
     ctx.translate(ox, oy);
-    ctx.fillStyle = seaPatterns[theme];
+    ctx.fillStyle = seaPatterns[theme2d()];
     ctx.fillRect(view.x0 - ox - 600, view.y0 - oy - 600, view.x1 - view.x0 + 1200, view.y1 - view.y0 + 1200);
     ctx.restore();
 
@@ -734,7 +825,7 @@
 
   // 街灯の柱と灯具（車より上に描く）
   function drawLights(view) {
-    const th = THEMES[theme];
+    const th = THEMES[theme2d()];
     for (const l of Track.lights) {
       if (!inView(l.x, l.y, view, 80)) continue;
       ctx.strokeStyle = th.pole;
@@ -794,7 +885,7 @@
     roundRect(-22, -12, 44, 24, 7); ctx.fill();
     ctx.fillStyle = 'rgba(20,30,40,0.85)';
     roundRect(5, -9, 8, 18, 3); ctx.fill();
-    if (THEMES[theme].lampsOn) {
+    if (THEMES[theme2d()].lampsOn) {
       // 夜はヘッドライト
       ctx.fillStyle = 'rgba(255,250,220,0.95)';
       ctx.fillRect(20, -10, 4, 5);
@@ -869,7 +960,7 @@
     // 消失点は自車の少し前方
     const vx = sx + Math.cos(forward) * vh * 0.3, vy = sy + Math.sin(forward) * vh * 0.3;
     const diag = Math.hypot(vw, vh) / 2;
-    const color = THEMES[theme].speedLine;
+    const color = THEMES[theme2d()].speedLine;
     ctx.lineCap = 'round';
     for (let i = 0, n = Math.round((10 + 34 * kk) * strength); i < n; i++) {
       const ang = Math.random() * Math.PI * 2;
@@ -885,14 +976,16 @@
   }
 
   // ロビーやリザルトのパネルが画面下を覆う高さ（その分だけ自車を上に映す）
+  let capturing = false; // 背景を保存するために描いている最中
   function panelCover() {
+    if (capturing) return 0;
     const panel = phase === 'lobby' ? ui.lobby : phase === 'results' ? ui.results : null;
     return panel ? Math.min(vh * 0.6, panel.offsetHeight + 30) : 0;
   }
 
   function draw(t) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = THEMES[theme].sea;
+    ctx.fillStyle = THEMES[theme2d()].sea;
     ctx.fillRect(0, 0, vw, vh);
 
     const z = cam.zoom;
@@ -900,8 +993,8 @@
     const cover = panelCover();
     // 追従視点では前方が広く見えるよう自車を画面の下寄りに置く
     const targetCy = (vh - cover) * (chase2D() ? 0.68 : 0.5);
-    cam.cy = cam.cy == null ? targetCy : cam.cy + (targetCy - cam.cy) * 0.1;
-    const cy = cam.cy;
+    if (!capturing) cam.cy = cam.cy == null ? targetCy : cam.cy + (targetCy - cam.cy) * 0.1;
+    const cy = capturing ? targetCy : cam.cy;
     // ダッシュ中は小さく揺らす
     const shake = cam.boost ? 2 : 0;
     ctx.translate(vw / 2 + (Math.random() - 0.5) * shake, cy + (Math.random() - 0.5) * shake);
@@ -913,22 +1006,43 @@
     drawScene(t, view);
 
     const racing = race && (phase === 'countdown' || phase === 'race');
-    for (const p of others.values()) {
+    for (const p of capturing ? [] : others.values()) {
       if (p.spectating && p.rid === (race && race.id)) continue;
       // レースに参加していない人の車は半透明（ぶつからないので練習走行の邪魔にならない）
       const inRace = racing && race.entrants.includes(p.pid);
       const alpha = racing && !inRace ? 0.35 : 1;
       drawCar({ x: p.rx, y: p.ry, a: p.ra, color: colorOf(p.pid), name: p.name, avatarUrl: p.avatarUrl, boost: p.boost, alpha, isMe: false, fall: p.fall, blink: p.blink });
     }
-    if (!me.spectating && me.pid) {
+    if (!capturing && !me.spectating && me.pid) {
       const fall = me.fall ? Math.min(1, me.fall.t / FALL.drop) * (me.fall.placed ? 0 : 1) : 0;
       drawCar({ x: me.x, y: me.y, a: me.a, color: colorOf(me.pid), name: me.name, avatarUrl: me.avatarUrl, boost: me.boost > 0, alpha: 1, isMe: true, fall, blink: me.blink > 0 });
     }
     drawLights(view);
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (capturing) return;
     drawSpeedLines(vw / 2, cy, (me.spectating ? 0 : me.a) + cam.rot);
     drawMinimap();
+  }
+
+  // 2D 表示のまま背景だけを描いた画像を作る（16:9 で横 width ピクセル）
+  function capture2D(width) {
+    const saved = { vw, vh, dpr };
+    vw = 1920;
+    vh = 1080;
+    dpr = width / 1920;
+    canvas.width = width;
+    canvas.height = Math.round(width * 9 / 16);
+    capturing = true;
+    try {
+      draw(now());
+    } finally {
+      capturing = false;
+    }
+    const blob = new Promise(res => canvas.toBlob(res, 'image/png'));
+    ({ vw, vh, dpr } = saved);
+    resize();
+    return blob;
   }
 
   // ---------- UI ----------
@@ -940,6 +1054,7 @@
     speedRange: $('speedRange'), speedVal: $('speedVal'), speedNote: $('speedNote'), theme: $('themeBtn'),
     countdown: $('countdown'), banner: $('banner'), results: $('results'), resultList: $('resultList'),
     focusHint: $('focusHint'), sound: $('soundBtn'), cam: $('camBtn'), quality: $('qualityBtn'), perfHint: $('perfHint'),
+    shotBtn: $('shotBtn'), shot: $('shot'), shotImg: $('shotImg'),
   };
 
   function showPanels() {
@@ -1014,11 +1129,12 @@
   function setTheme(t) {
     theme = t;
     save('ovice-3d:theme', t);
-    ui.theme.textContent = t === 'night' ? '🌙 夜' : '☀️ 朝';
+    ui.theme.textContent = THEME_LABEL[t];
     if (r3d) r3d.setTheme(t);
+    setAmbient();
   }
   ui.theme.addEventListener('click', () => {
-    setTheme(theme === 'night' ? 'morning' : 'night');
+    setTheme(THEME_ORDER[(THEME_ORDER.indexOf(theme) + 1) % THEME_ORDER.length]);
     ui.theme.blur();
   });
   setTheme(theme);
@@ -1054,9 +1170,46 @@
     if (e.code === 'KeyV' && !e.repeat && !typing(e)) setCamMode(nextCamMode());
   });
   setCamMode(cam.mode);
+  // ---------- 背景の保存 ----------
+  let shotUrl = null;
+  async function saveBackground() {
+    ui.shotBtn.disabled = true;
+    try {
+      const use3d = r3d && cam.mode !== 'chase2d';
+      const blob = use3d ? await r3d.capture(3840, 2160) : await capture2D(3840);
+      if (!blob) throw new Error('画像を作れませんでした');
+      if (shotUrl) URL.revokeObjectURL(shotUrl);
+      shotUrl = URL.createObjectURL(blob);
+      const d = new Date();
+      const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}${String(d.getSeconds()).padStart(2, '0')}`;
+      const view = use3d ? { chase: '3D追従', chaseTop: '上空追従', north: '上空固定' }[cam.mode] || '3D' : '2D';
+      const a = document.createElement('a');
+      a.href = shotUrl;
+      a.download = `oVice-Racing_背景_${THEME_SHORT[theme]}_${view}_${stamp}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // oVice の中などでダウンロードが止められても保存できるよう、画像も表示する
+      ui.shotImg.src = shotUrl;
+      ui.shot.classList.remove('hidden');
+    } catch (err) {
+      console.error(err);
+      alert('背景の保存に失敗しました: ' + (err.message || err));
+    } finally {
+      ui.shotBtn.disabled = false;
+      ui.shotBtn.blur();
+    }
+  }
+  ui.shotBtn.addEventListener('click', saveBackground);
+  $('shotClose').addEventListener('click', e => {
+    e.currentTarget.blur();
+    ui.shot.classList.add('hidden');
+  });
+
   ui.sound.addEventListener('click', () => {
     soundOn = !soundOn;
     ui.sound.textContent = soundOn ? '🔊' : '🔇';
+    setAmbient();
     ui.sound.blur();
   });
 

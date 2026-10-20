@@ -5,6 +5,8 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { buildY2K } from './y2k.js';
 import { Water } from 'three/addons/objects/Water.js';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
@@ -33,6 +35,7 @@ const THEMES = {
     road: 0, lamp: 0.2, cat: 0.25, windows: 0, headlight: 0.4, tail: 1.2, spot: 0, myHead: 0,
     city: 0x93a2b3, mountain: 0x4f7186,
     bloom: 0.3, bloomThreshold: 0.95,
+    sky: 'sky', skyParams: SKY, set: 'classic', lampColor: 0xffd9a6,
   },
   night: {
     fog: 0x07111f, fogNear: 2500, fogFar: 55000, exposure: 1.0,
@@ -42,8 +45,55 @@ const THEMES = {
     road: 0.8, lamp: 4, cat: 2.2, windows: 1.0, headlight: 5, tail: 3.2, spot: 3, myHead: 9,
     city: 0x161d29, mountain: 0x0a1018,
     bloom: 0.7, bloomThreshold: 0.8,
+    sky: 'gradient', grad: [0x01030a, 0x0d2140, 0x020812], stars: 1, moon: true, set: 'classic', lampColor: 0xffd9a6,
+  },
+  // ---- Y2K / フルティガーエアロ / リミナルスペース寄りのテーマ ----
+  // エアロ晴天：入道雲と深い青空、透き通った海、白い曲線の建物、立ちのぼる泡
+  aero: {
+    fog: 0xbfe6fa, fogNear: 16000, fogFar: 150000, exposure: 0.62, toneMap: 'neutral',
+    hemiSky: 0xd6efff, hemiGround: 0x2f8f96, hemi: 0.9, env: 0.75,
+    sun: 0xfffaf0, sunI: 2.8, sunElev: 52, sunAzim: 150,
+    water: 0x10a8c0, waterSun: 0xffffff,
+    road: 0, lamp: 0.2, cat: 0.2, windows: 0, headlight: 0.4, tail: 1.2, spot: 0, myHead: 0,
+    city: 0x93a2b3, mountain: 0x4f7186,
+    bloom: 0.3, bloomThreshold: 1.0,
+    // 物理的な空だと地平線付近が白っぽくなるため、鮮やかな青のグラデーションにする
+    sky: 'gradient', grad: [0x0a52cc, 0xc4ecff, 0x6fbfe3], stars: 0, moon: false,
+    set: 'y2k', y2kNight: 0, lampColor: 0xffffff, clouds: true, cloudColor: 0xffffff, cloudGlow: 0xdff4ff, cloudGlowI: 0.22,
+    bubbles: true, glassColor: 0xa6ecff,
+    look: { grain: 0.03, vignette: 0.22, ca: 0.0012, sat: 1.12, tint: [1.0, 1.02, 1.05], lift: [0.0, 0.015, 0.03], scan: 0 },
+  },
+  // 放課後の夕暮れ：桃色とラベンダーの空、海面のもや、点き始めたナトリウム灯、少し色あせた画面
+  dusk: {
+    fog: 0xcf9fb4, fogNear: 2500, fogFar: 70000, exposure: 0.62,
+    hemiSky: 0xffc9d6, hemiGround: 0x3b2c50, hemi: 0.75, env: 0.8,
+    sun: 0xff9c6a, sunI: 1.7, sunElev: 3.5, sunAzim: 250,
+    water: 0x3a4b78, waterSun: 0xffb48a,
+    road: 0.35, lamp: 2.4, cat: 1.3, windows: 0.6, headlight: 2.2, tail: 2.6, spot: 1.4, myHead: 4,
+    city: 0x6a5a78, mountain: 0x4a3e5c,
+    bloom: 0.75, bloomThreshold: 0.75,
+    sky: 'sky', skyParams: { turbidity: 9, rayleigh: 2.6, mieCoefficient: 0.012, mieDirectionalG: 0.92 },
+    set: 'y2k', y2kNight: 0.55, lampColor: 0xffbf73, windowColor: 0xffd9a8,
+    clouds: true, cloudColor: 0xffc6cf, cloudGlow: 0xff9fb0, cloudGlowI: 0.3,
+    mist: 0xf3c6d6, mistAmount: 0.8, flicker: true, glassColor: 0xffd6e6,
+    look: { grain: 0.055, vignette: 0.42, ca: 0.0024, sat: 0.86, tint: [1.04, 0.97, 1.02], lift: [0.03, 0.01, 0.04], scan: 0 },
+  },
+  // 深夜の蛍光灯：暗い青緑の空、白っぽい蛍光灯、低いもや、誰もいない都市、ブラウン管のような走査線
+  midnight: {
+    fog: 0x081a1b, fogNear: 1500, fogFar: 45000, exposure: 0.95,
+    hemiSky: 0x2a5c5a, hemiGround: 0x010404, hemi: 0.45, env: 0.5,
+    sun: 0x9be9ff, sunI: 0.3, sunElev: 35, sunAzim: 200,
+    water: 0x01191a, waterSun: 0x8ff7e8,
+    road: 0.75, lamp: 4.2, cat: 1.8, windows: 1.2, headlight: 5, tail: 3.2, spot: 2.6, myHead: 8,
+    city: 0x161d29, mountain: 0x0a1018,
+    bloom: 0.8, bloomThreshold: 0.72,
+    sky: 'gradient', grad: [0x000304, 0x0a2a2b, 0x010606], stars: 0.35, moon: false,
+    set: 'y2k', y2kNight: 1, lampColor: 0xd9fff4, windowColor: 0xc8fff2,
+    mist: 0x9fd8cf, mistAmount: 0.6, flicker: true, glassColor: 0x9ff5e6,
+    look: { grain: 0.075, vignette: 0.55, ca: 0.003, sat: 0.72, tint: [0.93, 1.05, 1.0], lift: [0.0, 0.02, 0.02], scan: 0.045 },
   },
 };
+export const THEME_NAMES = ['night', 'morning', 'aero', 'dusk', 'midnight'];
 
 // 決まった並びの乱数（全員の画面で同じ景色にする）
 function seeded(seed) {
@@ -303,6 +353,7 @@ export function createRenderer(opts) {
     geo.setIndex(idx);
     geo.computeVertexNormals();
     const road = new THREE.Mesh(geo, roadMat);
+    road.name = 'Road';
     road.receiveShadow = true;
     scene.add(road);
 
@@ -331,7 +382,9 @@ export function createRenderer(opts) {
     sgeo.setAttribute('uv', new THREE.Float32BufferAttribute(su, 2));
     sgeo.setIndex(si);
     sgeo.computeVertexNormals();
-    scene.add(new THREE.Mesh(sgeo, concreteMat));
+    const sides = new THREE.Mesh(sgeo, concreteMat);
+    sides.name = 'DeckSides';
+    scene.add(sides);
   }
 
   const dummy = new THREE.Object3D();
@@ -366,12 +419,17 @@ export function createRenderer(opts) {
       dummy.updateMatrix();
       caps.setMatrixAt(i, dummy.matrix);
     });
+    cols.name = 'PierColumns';
+    caps.name = 'PierCaps';
     scene.add(cols, caps);
   }
 
   // 街灯（柱・腕・灯具・発光面）
   const lampHeads = [];
   const lensMat = new THREE.MeshStandardMaterial({ color: 0x222222, emissive: 0xffd9a6, emissiveIntensity: th.lamp });
+  // 一部の街灯は切れかけてちらつく（夕暮れ・深夜のテーマ）
+  const lensFlickerMat = lensMat.clone();
+  let flickOn = true;
   {
     const L = T.lights;
     const metal = new THREE.MeshStandardMaterial({ color: 0x5d636b, metalness: 0.7, roughness: 0.38 });
@@ -381,7 +439,10 @@ export function createRenderer(opts) {
     const poles = new THREE.InstancedMesh(poleGeo, metal, L.length);
     const arms = new THREE.InstancedMesh(box, metal, L.length);
     const heads = new THREE.InstancedMesh(box, metal, L.length);
-    const lenses = new THREE.InstancedMesh(box, lensMat, L.length);
+    const flickIdx = L.map((_, i) => i).filter(i => i % 11 === 5);
+    const lenses = new THREE.InstancedMesh(box, lensMat, L.length - flickIdx.length);
+    const lensesFlicker = new THREE.InstancedMesh(box, lensFlickerMat, flickIdx.length);
+    let li = 0, lf = 0;
     L.forEach((l, i) => {
       const ang = Math.atan2(l.ly - l.y, l.lx - l.x);
       const len = Math.hypot(l.lx - l.x, l.ly - l.y);
@@ -402,11 +463,17 @@ export function createRenderer(opts) {
       dummy.position.set(l.lx, DECK + LAMP_H - 6.4, l.ly);
       dummy.scale.set(25, 1.2, 9);
       dummy.updateMatrix();
-      lenses.setMatrixAt(i, dummy.matrix);
+      if (i % 11 === 5) lensesFlicker.setMatrixAt(lf++, dummy.matrix);
+      else lenses.setMatrixAt(li++, dummy.matrix);
       lampHeads.push(new THREE.Vector3(l.lx, DECK + LAMP_H - 8, l.ly));
     });
     poles.castShadow = arms.castShadow = heads.castShadow = true;
-    scene.add(poles, arms, heads, lenses);
+    poles.name = 'LampPoles';
+    arms.name = 'LampArms';
+    heads.name = 'LampHeads';
+    lenses.name = 'LampLights';
+    lensesFlicker.name = 'LampLightsFlicker';
+    scene.add(poles, arms, heads, lenses, lensesFlicker);
   }
 
   // 道路の縁の反射板（夜に光る）
@@ -422,6 +489,7 @@ export function createRenderer(opts) {
       dummy.updateMatrix();
       cats.setMatrixAt(i, dummy.matrix);
     });
+    cats.name = 'Reflectors';
     scene.add(cats);
   }
 
@@ -440,6 +508,7 @@ export function createRenderer(opts) {
     cm.position.set(s0.x, DECK + 0.6, s0.z);
     cm.rotation.y = -s0.ang;
     cm.receiveShadow = true;
+    cm.name = 'StartLine';
     scene.add(cm);
 
     const gate = new THREE.Group();
@@ -447,11 +516,13 @@ export function createRenderer(opts) {
     for (const sd of [-1, 1]) {
       const tw = new THREE.Mesh(new THREE.BoxGeometry(26, 320, 26), steel);
       tw.position.set(0, 160, sd * (half + 18));
+      tw.name = sd < 0 ? 'GateTowerL' : 'GateTowerR';
       tw.castShadow = true;
       gate.add(tw);
     }
     const beam = new THREE.Mesh(new THREE.BoxGeometry(22, 46, half * 2 + 70), steel);
     beam.position.set(0, 320, 0);
+    beam.name = 'GateBeam';
     beam.castShadow = true;
     gate.add(beam);
     const banner = canvasTexture(1024, 96, (g) => {
@@ -469,11 +540,13 @@ export function createRenderer(opts) {
         new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: banner, emissiveIntensity: 1.6 })
       );
       pl.position.set(sd * 11.5, 320, 0);
+      pl.name = sd < 0 ? 'GateSignBack' : 'GateSignFront';
       pl.rotation.y = (sd * Math.PI) / 2;
       gate.add(pl);
     }
     gate.position.set(s0.x, DECK, s0.z);
     gate.rotation.y = -s0.ang;
+    gate.name = 'StartGate';
     scene.add(gate);
   }
 
@@ -503,6 +576,7 @@ export function createRenderer(opts) {
       const g = new THREE.PlaneGeometry(bp.len, bp.w);
       g.rotateX(-Math.PI / 2);
       const m = new THREE.Mesh(g, mat);
+      m.name = 'BoostPad';
       m.position.set(q.x, DECK + 0.7, q.z);
       m.rotation.y = -q.ang;
       scene.add(m);
@@ -628,6 +702,7 @@ export function createRenderer(opts) {
       dummy.updateMatrix();
       city.setMatrixAt(i, dummy.matrix);
     });
+    city.name = 'City';
     scene.add(city);
   }
   const mountainMat = new THREE.MeshStandardMaterial({ color: th.mountain, roughness: 1, flatShading: true });
@@ -655,6 +730,7 @@ export function createRenderer(opts) {
       dummy.updateMatrix();
       mts.setMatrixAt(i, dummy.matrix);
     }
+    mts.name = 'Mountains';
     scene.add(mts);
   }
 
@@ -680,26 +756,49 @@ export function createRenderer(opts) {
   // 環境マップ（車の塗装や海に映り込む景色）
   const pmrem = new THREE.PMREMGenerator(renderer);
   const envs = {};
-  {
-    const s1 = new THREE.Scene();
-    const sk = new Sky();
-    sk.scale.setScalar(10000);
-    s1.add(sk);
-    const el = THREE.MathUtils.degToRad(THEMES.morning.sunElev), az = THREE.MathUtils.degToRad(THEMES.morning.sunAzim);
-    sk.material.uniforms.sunPosition.value.setFromSphericalCoords(1, Math.PI / 2 - el, az);
-    for (const k in SKY) sk.material.uniforms[k].value = SKY[k];
-    envs.morning = pmrem.fromScene(s1, 0, 1, 20000).texture;
-    const s2 = new THREE.Scene();
-    s2.add(new THREE.Mesh(new THREE.SphereGeometry(5000, 32, 16), nightSkyMat));
-    const warm = new THREE.MeshBasicMaterial({ color: 0xffc070 });
-    for (let i = 0; i < 14; i++) {
-      const m = new THREE.Mesh(new THREE.SphereGeometry(120, 8, 8), warm);
-      const a = (i / 14) * Math.PI * 2;
-      m.position.set(Math.cos(a) * 3000, 600 + (i % 3) * 300, Math.sin(a) * 3000);
-      s2.add(m);
+  function getEnv(name) {
+    if (envs[name]) return envs[name];
+    const t = THEMES[name];
+    const s = new THREE.Scene();
+    if (t.sky === 'sky') {
+      const sk = new Sky();
+      sk.scale.setScalar(10000);
+      const el = THREE.MathUtils.degToRad(t.sunElev), az = THREE.MathUtils.degToRad(t.sunAzim);
+      sk.material.uniforms.sunPosition.value.setFromSphericalCoords(1, Math.PI / 2 - el, az);
+      for (const k in t.skyParams) sk.material.uniforms[k].value = t.skyParams[k];
+      s.add(sk);
+      if (t.clouds) {
+        const cm = new THREE.MeshBasicMaterial({ color: t.cloudColor || 0xffffff });
+        for (let i = 0; i < 10; i++) {
+          const m = new THREE.Mesh(new THREE.SphereGeometry(500, 12, 8), cm);
+          const a = (i / 10) * Math.PI * 2;
+          m.position.set(Math.cos(a) * 4000, 1200 + (i % 3) * 400, Math.sin(a) * 4000);
+          m.scale.y = 0.6;
+          s.add(m);
+        }
+      }
+    } else {
+      const mat = nightSkyMat.clone();
+      ['top', 'mid', 'bottom'].forEach((k, i) => mat.uniforms[k].value.set(t.grad[i]));
+      s.add(new THREE.Mesh(new THREE.SphereGeometry(5000, 32, 16), mat));
+      // 映り込み用：昼は雲、夜は明かり
+      const warm = new THREE.MeshBasicMaterial({ color: t.clouds ? 0xffffff : t.lampColor });
+      for (let i = 0; i < 14; i++) {
+        const m = new THREE.Mesh(new THREE.SphereGeometry(t.clouds ? 420 : 120, 10, 8), warm);
+        const a = (i / 14) * Math.PI * 2;
+        m.position.set(Math.cos(a) * 3000, (t.clouds ? 500 : 600) + (i % 3) * 300, Math.sin(a) * 3000);
+        if (t.clouds) m.scale.y = 0.55;
+        s.add(m);
+      }
     }
-    envs.night = pmrem.fromScene(s2, 0, 1, 20000).texture;
+    envs[name] = pmrem.fromScene(s, 0, 1, 20000).texture;
+    return envs[name];
   }
+
+  // ---------- Y2K の景色 ----------
+  const y2k = buildY2K({ Track: T, center, DECK, half });
+  scene.add(y2k.group, y2k.clouds, y2k.bubbles, y2k.mist);
+  const classicSet = ['City', 'Mountains'].map(n => scene.getObjectByName(n)).filter(Boolean);
 
   // ---------- 車 ----------
   const carGeo = (() => {
@@ -850,16 +949,40 @@ export function createRenderer(opts) {
   const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), th.bloom, 0.4, th.bloomThreshold);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
+  const lookPass = new ShaderPass({
+    uniforms: {
+      tDiffuse: { value: null }, time: { value: 0 }, grain: { value: 0 }, vignette: { value: 0 }, ca: { value: 0 },
+      sat: { value: 1 }, scan: { value: 0 }, tint: { value: new THREE.Vector3(1, 1, 1) }, lift: { value: new THREE.Vector3() },
+    },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `
+      uniform sampler2D tDiffuse; uniform float time, grain, vignette, ca, sat, scan; uniform vec3 tint, lift; varying vec2 vUv;
+      float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+      void main() {
+        vec2 c = vUv - 0.5; float d = length(c);
+        vec2 off = c * ca * (0.5 + d * 2.0);
+        vec3 col = vec3(texture2D(tDiffuse, vUv + off).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv - off).b);
+        float l = dot(col, vec3(0.299, 0.587, 0.114));
+        col = mix(vec3(l), col, sat);
+        col = col * tint + lift * (1.0 - col);
+        col *= 1.0 - vignette * smoothstep(0.25, 0.85, d);
+        col += (hash(gl_FragCoord.xy + fract(time) * 97.0) - 0.5) * grain;
+        col *= 1.0 - scan * (0.5 + 0.5 * sin(gl_FragCoord.y * 3.14159));
+        gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+      }`,
+  });
+  composer.addPass(lookPass);
 
   // ---------- 見た目の切り替え ----------
   function applyTheme(name) {
     themeName = THEMES[name] ? name : 'night';
     th = THEMES[themeName];
-    const night = themeName === 'night';
     scene.fog.color.set(th.fog);
     scene.fog.near = th.fogNear;
     scene.fog.far = th.fogFar;
     renderer.toneMappingExposure = th.exposure;
+    // エアロ晴天は色が鮮やかに残るトーンマッピングにする
+    renderer.toneMapping = th.toneMap === 'neutral' ? THREE.NeutralToneMapping : THREE.ACESFilmicToneMapping;
     hemi.color.set(th.hemiSky);
     hemi.groundColor.set(th.hemiGround);
     hemi.intensity = th.hemi;
@@ -868,9 +991,14 @@ export function createRenderer(opts) {
     const el = THREE.MathUtils.degToRad(th.sunElev), az = THREE.MathUtils.degToRad(th.sunAzim);
     sunDir.setFromSphericalCoords(1, Math.PI / 2 - el, az);
     sky.material.uniforms.sunPosition.value.copy(sunDir);
-    sky.visible = !night;
-    nightSky.visible = stars.visible = moon.visible = night;
-    scene.environment = envs[themeName];
+    if (th.skyParams) for (const k in th.skyParams) sky.material.uniforms[k].value = th.skyParams[k];
+    sky.visible = th.sky === 'sky';
+    nightSky.visible = th.sky === 'gradient';
+    if (th.grad) ['top', 'mid', 'bottom'].forEach((k, i) => nightSkyMat.uniforms[k].value.set(th.grad[i]));
+    stars.visible = (th.stars || 0) > 0;
+    stars.material.opacity = th.stars || 0;
+    moon.visible = !!th.moon;
+    scene.environment = getEnv(themeName);
     scene.environmentIntensity = th.env;
     simpleWater.material.color.set(th.water);
     if (reflectWater) {
@@ -878,8 +1006,28 @@ export function createRenderer(opts) {
       reflectWater.material.uniforms.sunColor.value.set(th.waterSun);
     }
     roadMat.emissiveIntensity = th.road;
-    roadMat.roughness = night ? 0.55 : 0.8; // 夜は少し濡れた感じ
-    lensMat.emissiveIntensity = th.lamp;
+    roadMat.emissive.set(th.lampColor);
+    roadMat.roughness = th.road > 0.3 ? 0.55 : 0.8; // 夜は少し濡れた感じ
+    lensMat.emissiveIntensity = lensFlickerMat.emissiveIntensity = th.lamp;
+    lensMat.emissive.set(th.lampColor);
+    lensFlickerMat.emissive.set(th.lampColor);
+    spots.forEach(s => s.color.set(th.lampColor));
+    // 景色の組み合わせ（従来の街と山 / Y2K の街）
+    classicSet.forEach(o => (o.visible = th.set !== 'y2k'));
+    y2k.group.visible = th.set === 'y2k';
+    y2k.applyTheme(th);
+    const look = th.look;
+    lookPass.enabled = !!look;
+    if (look) {
+      const u = lookPass.uniforms;
+      u.grain.value = look.grain;
+      u.vignette.value = look.vignette;
+      u.ca.value = look.ca;
+      u.sat.value = look.sat;
+      u.scan.value = look.scan;
+      u.tint.value.set(...look.tint);
+      u.lift.value.set(...look.lift);
+    }
     catMat.emissiveIntensity = th.cat;
     cityMat.color.set(th.city);
     cityMat.emissiveIntensity = th.windows;
@@ -1103,6 +1251,12 @@ export function createRenderer(opts) {
     sky.position.copy(camera.position);
 
     // 動くもの
+    y2k.update(t, dt, tg);
+    if (th.flicker) {
+      if (Math.random() < (flickOn ? 0.05 : 0.35)) flickOn = !flickOn;
+      lensFlickerMat.emissiveIntensity = th.lamp * (flickOn ? 1 : 0.04);
+    } else lensFlickerMat.emissiveIntensity = th.lamp;
+    lookPass.uniforms.time.value = t / 1000;
     chevron.offset.x -= dt * 1.6;
     simpleNormals.offset.x += dt * 0.0025;
     simpleNormals.offset.y += dt * 0.0016;
@@ -1125,11 +1279,102 @@ export function createRenderer(opts) {
     labelRenderer.render(scene, camera);
   }
 
+  // 背景だけの画像を作る（車・名札・火の粉などを隠して、指定サイズで描き直す）
+  function capture(width, height) {
+    const max = renderer.capabilities.maxTextureSize || 4096;
+    const k = Math.min(1, max / width, max / height);
+    width = Math.floor(width * k);
+    height = Math.floor(height * k);
+    const hidden = [];
+    const hide = o => { if (o.visible) { o.visible = false; hidden.push(o); } };
+    for (const c of cars.values()) hide(c.outer);
+    [splash.points, exhaust.points, ...rings].forEach(hide);
+    renderer.setPixelRatio(1);
+    renderer.setSize(width, height, false);
+    composer.setPixelRatio(1);
+    composer.setSize(width, height);
+    camera.clearViewOffset();
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+    if (Q.bloom) composer.render();
+    else renderer.render(scene, camera);
+    // toBlob は呼んだ時点の画面を写し取るので、すぐ元に戻してよい
+    const blob = new Promise(res => canvas.toBlob(res, 'image/png'));
+    hidden.forEach(o => (o.visible = true));
+    sizeKey = ''; // 次のフレームで元の大きさに戻す
+    return blob;
+  }
+
+  // 背景（車や空・粒子を除いた景色）を glTF バイナリ（.glb）に書き出す
+  //  - 1 単位 = 1 m（ゲーム内の 10 単位）に縮め、コースの中心を原点に置く
+  //  - 同じ形を並べた物（街灯など）は、他のソフトでも読めるよう 1 つの形に焼き込む
+  //  - 海は特殊な描き方をしているため、波の凹凸を付けた平面として書き出す
+  // 道路まわりの部品（「道なし」で書き出すときに外すもの）
+  const ROAD_PARTS = new Set(['Road', 'DeckSides', 'PierColumns', 'PierCaps', 'LampPoles', 'LampArms', 'LampHeads', 'LampLights', 'LampLightsFlicker', 'Reflectors', 'StartLine', 'StartGate', 'BoostPad', ...y2k.roadParts]);
+
+  async function exportBackground(theme, { road = true } = {}) {
+    const [{ GLTFExporter }, { mergeGeometries }] = await Promise.all([
+      import('three/addons/exporters/GLTFExporter.js'),
+      import('three/addons/utils/BufferGeometryUtils.js'),
+    ]);
+    const prevTheme = themeName;
+    if (theme) applyTheme(theme);
+    const skip = new Set([sky, nightSky, stars, moon, splash.points, exhaust.points, ...rings, simpleWater, reflectWater, y2k.bubbles, y2k.mist, y2k.group]);
+    for (const c of cars.values()) skip.add(c.outer);
+    const root = new THREE.Group();
+    root.name = `oVice_Racing_Background_${road ? 'Road' : 'NoRoad'}_${themeName}`;
+    const world = new THREE.Group();
+    world.name = 'Course';
+    world.scale.setScalar(0.1);
+    world.position.set(-center.x * 0.1, 0, -center.z * 0.1);
+    root.add(world);
+    const m4 = new THREE.Matrix4();
+    // 書き出し先のソフトでガラスらしく見えるよう、透過（transmission）として書き出す
+    const glass = y2k.materials.glass;
+    const glassSaved = { transparent: glass.transparent, opacity: glass.opacity, transmission: glass.transmission, depthWrite: glass.depthWrite };
+    Object.assign(glass, { transparent: false, opacity: 1, transmission: 0.95, depthWrite: true });
+    const candidates = [...scene.children, ...(y2k.group.visible ? y2k.group.children : [])];
+    for (const o of candidates) {
+      if (skip.has(o) || o.isLight || !(o.isMesh || o.isGroup) || !o.visible) continue;
+      if (!road && ROAD_PARTS.has(o.userData.part || o.name)) continue;
+      if (o.isInstancedMesh) {
+        const parts = [];
+        for (let i = 0; i < o.count; i++) {
+          o.getMatrixAt(i, m4);
+          parts.push(o.geometry.clone().applyMatrix4(m4));
+        }
+        const merged = new THREE.Mesh(mergeGeometries(parts), o.material);
+        merged.name = o.name || 'Instances';
+        world.add(merged);
+      } else {
+        const c = o.clone();
+        c.name = o.name || c.name;
+        world.add(c);
+      }
+    }
+    const seaNormals = waterNormals.clone();
+    seaNormals.repeat.set(160, 160);
+    seaNormals.needsUpdate = true;
+    const seaGeo = new THREE.PlaneGeometry(120000, 120000);
+    seaGeo.rotateX(-Math.PI / 2);
+    const sea = new THREE.Mesh(seaGeo, new THREE.MeshStandardMaterial({ color: th.water, roughness: 0.12, metalness: 0.1, normalMap: seaNormals }));
+    sea.name = 'Sea';
+    sea.position.copy(center);
+    world.add(sea);
+    const exporter = new GLTFExporter();
+    const glb = await exporter.parseAsync(root, { binary: true, onlyVisible: true, maxTextureSize: 2048 });
+    Object.assign(glass, glassSaved);
+    if (theme && theme !== prevTheme) applyTheme(prevTheme);
+    return new Blob([glb], { type: 'model/gltf-binary' });
+  }
+
   applyTheme(themeName);
   applyQuality(qualityName);
 
   return {
+    exportBackground,
     render,
+    capture,
     setTheme: applyTheme,
     setQuality: applyQuality,
     get fps() { return fps; },

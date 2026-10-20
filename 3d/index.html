@@ -21,6 +21,7 @@
     <div id="mode" class="mode" title="クリックで接続診断を表示">接続中…</div>
     <pre id="diag" class="diag hidden"></pre>
     <div class="corner">
+      <button id="shotBtn" title="車や表示を消した背景だけを 4K 画像で保存">📷 背景を保存</button>
       <button id="qualityBtn" title="画質の切り替え（重いときは下げてください）">画質: 最高</button>
       <button id="themeBtn" title="夜と朝の切り替え">🌙 夜</button>
       <button id="camBtn" title="視点の切り替え（V キー）">🧭 固定視点</button>
@@ -95,6 +96,11 @@
 
     <div id="focusHint" class="focus-hint hidden">画面をクリックするとキーボードで操作できます</div>
     <div id="perfHint" class="perf-hint hidden">動きが重いときは、右下の「画質」を下げてください</div>
+    <div id="shot" class="shot hidden">
+      <img id="shotImg" alt="保存した背景" />
+      <p>背景を保存しました。保存されていない場合は、画像を右クリック →「名前を付けて画像を保存」してください。</p>
+      <button id="shotClose">閉じる</button>
+    </div>
 
     <div id="touch" class="touch-pad">
       <div class="left">
