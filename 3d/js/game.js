@@ -3,6 +3,8 @@
   'use strict';
   // 3D 描画モジュールをこのファイルと同じ場所から読み込むため
   const SCRIPT_URL = document.currentScript ? document.currentScript.src : location.href;
+  // index.html で付けた版番号（3D 描画の読み込みにも付けて、古いファイルが使われないようにする）
+  const VERSION = new URL(SCRIPT_URL).searchParams.get('v') || 'dev';
   let r3d = null; // 3D 描画（読み込めたら入る）
   let r3dError = '';
 
@@ -1351,6 +1353,7 @@
     if (diag.classList.contains('hidden')) return;
     const self = Net.self;
     diag.textContent = [
+      `バージョン: ${VERSION}　ページ: ${location.pathname}`,
       `モード: ${Net.mode}`,
       `自分: ${self.name || '-'} (${self.pid || '-'})`,
       `oVice 参加者: ${Net.participants.map(p => p.name || '(名前なし)').join(', ') || '-'}`,
@@ -1388,9 +1391,11 @@
   });
   updateQualityBtn();
 
-  import(new URL('./render3d.js', SCRIPT_URL).href)
-    .then(mod => {
-      r3d = mod.createRenderer({ canvas: $('gl'), labelsBefore: $('mode'), Track, theme, quality });
+  const versioned = f => new URL(`./${f}?v=${VERSION}`, SCRIPT_URL).href;
+  Promise.all([import(versioned('render3d.js')), import(versioned('y2k.js'))])
+    .then(([mod, y2kMod]) => {
+      r3d = mod.createRenderer({ canvas: $('gl'), labelsBefore: $('mode'), Track, theme, quality, buildY2K: y2kMod.buildY2K });
+      updateVersionText();
       window.__r3d = r3d; // デバッグ用
       document.body.classList.add('is3d');
       setCamMode(CAM_MODES.includes(savedCam) ? savedCam : cam.mode);
@@ -1400,7 +1405,14 @@
       r3dError = String((err && err.message) || err).slice(0, 80);
       $('gl').remove();
       ui.quality.classList.add('hidden');
+      updateVersionText();
     });
+
+  // ロビーに版番号と描画方式を出す（oVice で古い版が動いていないか確かめる用）
+  function updateVersionText() {
+    $('verText').textContent = `バージョン ${VERSION} ・ ${r3d ? '3D 表示' : r3dError ? '2D 表示（3D を使えません）' : '読み込み中…'}`;
+  }
+  updateVersionText();
 
   // 3D 用：描画に必要な状態をまとめる
   function state3d(t, dt) {

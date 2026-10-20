@@ -6,7 +6,6 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { buildY2K } from './y2k.js';
 import { Water } from 'three/addons/objects/Water.js';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
@@ -796,7 +795,8 @@ export function createRenderer(opts) {
   }
 
   // ---------- Y2K の景色 ----------
-  const y2k = buildY2K({ Track: T, center, DECK, half });
+  // y2k.js は版番号付きで game.js が読み込んで渡す
+  const y2k = opts.buildY2K({ Track: T, center, DECK, half });
   scene.add(y2k.group, y2k.clouds, y2k.bubbles, y2k.mist);
   const classicSet = ['City', 'Mountains'].map(n => scene.getObjectByName(n)).filter(Boolean);
 

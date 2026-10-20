@@ -81,6 +81,11 @@ body.view2d .labels3d {
 .shot p {
   margin: 0;
 }
+.ver {
+  margin: 6px 0 0;
+  font-size: 10px;
+  opacity: 0.55;
+}
 .perf-hint {
   position: fixed;
   left: 50%;
