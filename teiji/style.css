@@ -1,0 +1,585 @@
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #2b2b3a;
+  color: #333;
+  font-family: 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+canvas {
+  display: block;
+}
+.hidden {
+  display: none !important;
+}
+#game {
+  position: fixed;
+  inset: 0;
+}
+
+button {
+  font: inherit;
+  font-weight: 800;
+  color: #444;
+  background: #fff;
+  border: 2px solid #d9d2c3;
+  border-radius: 999px;
+  padding: 5px 14px;
+  cursor: pointer;
+}
+button:hover {
+  border-color: #f4a340;
+}
+button.sel {
+  background: #fff3d6;
+  border-color: #f08a24;
+  color: #c45d00;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+button.start,
+button.primary {
+  background: #f08a24;
+  border-color: #f08a24;
+  color: #fff;
+}
+button.start:hover,
+button.primary:hover {
+  background: #ff9d3a;
+}
+
+/* ---------- パネル ---------- */
+.panel {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(640px, calc(100vw - 20px));
+  max-height: calc(100vh - 20px);
+  overflow: auto;
+  background: rgba(255, 253, 247, 0.96);
+  border: 3px solid #f2d9a6;
+  border-radius: 22px;
+  padding: 14px 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+.panel h1 {
+  margin: 0 0 10px;
+  text-align: center;
+  line-height: 1.15;
+}
+.logo {
+  display: block;
+  font-size: clamp(28px, 6vw, 44px);
+  font-weight: 800;
+  color: #f08a24;
+  letter-spacing: 0.04em;
+  text-shadow: 3px 3px 0 #fff, 5px 5px 0 #f2d9a6;
+}
+.panel h1 small {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: #8a7a62;
+  margin-top: 4px;
+}
+.panel h2 {
+  font-size: 14px;
+  color: #8a7a62;
+  border-top: 2px dashed #eadfc8;
+  padding-top: 10px;
+  margin: 12px 0 8px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0;
+}
+.row.center {
+  justify-content: center;
+}
+.label {
+  min-width: 4em;
+  font-size: 13px;
+  font-weight: 800;
+  color: #8a7a62;
+}
+.chars button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 14px;
+  padding: 2px 12px 2px 6px;
+}
+.chars canvas {
+  height: 48px;
+  width: auto !important;
+}
+#soloBtn {
+  font-size: 17px;
+  padding: 8px 26px;
+  margin: 4px auto 0;
+}
+.or {
+  font-size: 12px;
+  color: #999;
+}
+.code-input {
+  width: 5.5em;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 2px solid #d9d2c3;
+  font: inherit;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.code-row {
+  font-size: 13px;
+}
+.code {
+  font-size: 22px;
+  letter-spacing: 0.2em;
+  color: #e65100;
+}
+button.leave {
+  margin-left: auto;
+}
+.parties,
+.players,
+.results {
+  list-style: none;
+  margin: 6px 0;
+  padding: 0;
+}
+.parties li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 13px;
+}
+.parties li span {
+  flex: 1;
+}
+.parties li.label {
+  font-size: 11px;
+  color: #999;
+}
+.players li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 14px;
+}
+.players i,
+.results i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.players small {
+  color: #999;
+}
+.tag {
+  font-size: 11px;
+  background: #eee;
+  border-radius: 999px;
+  padding: 1px 8px;
+  margin-left: 4px;
+}
+.tag.busy {
+  background: #ffe0b2;
+  color: #e65100;
+}
+#hostControls .start {
+  margin-left: auto;
+  font-size: 16px;
+  padding: 7px 24px;
+}
+.note {
+  font-size: 12px;
+  color: #6d6252;
+  margin: 8px 0 4px;
+  min-height: 1em;
+}
+.note.error {
+  color: #d32f2f;
+}
+.keys {
+  font-size: 11px;
+  color: #8a7a62;
+  line-height: 1.7;
+  margin: 8px 0 2px;
+}
+kbd {
+  background: #fff;
+  border: 1px solid #d9d2c3;
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 4px;
+  font-family: inherit;
+  font-size: 11px;
+}
+.credit {
+  font-size: 11px;
+  color: #a0937b;
+  margin: 4px 0 0;
+  display: flex;
+  justify-content: space-between;
+}
+.credit a {
+  color: #c45d00;
+}
+
+/* 結果 */
+.panel.end {
+  text-align: center;
+}
+#endArt {
+  margin: 0 auto;
+}
+.end-text {
+  font-size: 14px;
+  line-height: 1.8;
+}
+.results li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: 10px;
+  font-size: 14px;
+  text-align: left;
+}
+.results li:nth-child(odd) {
+  background: #faf3e3;
+}
+.results li.me {
+  outline: 2px solid #f08a24;
+}
+.results li b {
+  width: 1.6em;
+  text-align: center;
+  color: #c45d00;
+}
+.results li span {
+  flex: 1;
+}
+.results li small {
+  color: #c45d00;
+  font-size: 11px;
+  margin-left: 4px;
+}
+.results li em {
+  font-style: normal;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- プレイ中の表示 ---------- */
+.hud {
+  position: fixed;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: clamp(8px, 3vw, 34px);
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.55), 0 0 6px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.hud div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.hud small {
+  font-size: 11px;
+  font-weight: 800;
+  opacity: 0.95;
+}
+.hud b {
+  font-size: clamp(15px, 2.6vw, 22px);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.hud b.hurry {
+  color: #ff5252;
+  animation: blink 0.5s steps(2) infinite;
+}
+@keyframes blink {
+  50% {
+    opacity: 0.4;
+  }
+}
+.toasts {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  width: min(92vw, 560px);
+}
+.toast {
+  background: rgba(255, 253, 247, 0.95);
+  border: 2px solid #f2d9a6;
+  color: #5d4a2e;
+  font-weight: 800;
+  font-size: 14px;
+  border-radius: 999px;
+  padding: 5px 16px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  animation: pop 0.25s ease-out;
+  transition: opacity 0.4s;
+  text-align: center;
+}
+.toast.out {
+  opacity: 0;
+}
+@keyframes pop {
+  from {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+}
+.banner {
+  position: fixed;
+  left: 50%;
+  top: 38%;
+  transform: translate(-50%, -50%);
+  background: rgba(255, 253, 247, 0.95);
+  border: 3px solid #f08a24;
+  border-radius: 18px;
+  padding: 10px 24px;
+  font-size: 22px;
+  font-weight: 800;
+  color: #c45d00;
+  text-align: center;
+  pointer-events: none;
+}
+.banner small {
+  display: block;
+  font-size: 13px;
+  color: #6d6252;
+}
+
+/* ステージ紹介 */
+.intro {
+  position: fixed;
+  inset: 0;
+  background: #1d1b26;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+  padding: 20px;
+}
+.intro .world {
+  font-size: clamp(24px, 5vw, 38px);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.intro .name {
+  font-size: clamp(18px, 3.6vw, 26px);
+  font-weight: 800;
+  color: #ffd38c;
+}
+.intro .who {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 18px;
+  font-weight: 800;
+  margin: 8px 0;
+}
+.intro .memo {
+  font-size: 13px;
+  color: #cfc6b4;
+  max-width: 520px;
+  margin: 4px 0;
+}
+.intro .count {
+  font-size: clamp(36px, 8vw, 64px);
+  font-weight: 800;
+  color: #ffeb3b;
+}
+
+/* ---------- 右上・左下 ---------- */
+.corner {
+  position: fixed;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  gap: 6px;
+}
+.corner button {
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.85);
+}
+.mode {
+  position: fixed;
+  left: 8px;
+  bottom: 8px;
+  font-size: 11px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 999px;
+  padding: 3px 10px;
+  cursor: pointer;
+  max-width: 60vw;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.diag {
+  position: fixed;
+  left: 8px;
+  bottom: 34px;
+  max-width: min(92vw, 560px);
+  max-height: 50vh;
+  overflow: auto;
+  font-size: 11px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #cfe;
+  padding: 8px;
+  border-radius: 8px;
+  white-space: pre-wrap;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.focus-hint {
+  position: fixed;
+  left: 50%;
+  bottom: 44px;
+  transform: translateX(-50%);
+  font-size: 12px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 999px;
+  padding: 4px 12px;
+  pointer-events: none;
+}
+.ver {
+  color: #b8ab92;
+}
+
+/* oVice のオブジェクト枠など、縦が狭い画面 */
+@media (max-height: 460px) {
+  .panel {
+    padding: 8px 14px;
+    border-radius: 16px;
+  }
+  .logo {
+    font-size: 26px;
+  }
+  .panel h1 small {
+    display: none;
+  }
+  #endArt {
+    height: 72px !important;
+    width: auto !important;
+  }
+  .end-text {
+    font-size: 12px;
+    line-height: 1.6;
+    margin: 4px 0;
+  }
+  .keys {
+    display: none;
+  }
+  .chars canvas {
+    height: 36px;
+  }
+}
+
+/* ---------- タッチ操作 ---------- */
+.touch-pad {
+  display: none;
+}
+@media (hover: none) and (pointer: coarse) {
+  body.playing .touch-pad {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 10px;
+    justify-content: space-between;
+    padding: 0 12px;
+    pointer-events: none;
+  }
+  body.playing .corner,
+  body.playing .mode {
+    bottom: auto;
+    top: 8px;
+  }
+  body.playing .mode,
+  .focus-hint {
+    display: none !important;
+  }
+}
+@media (hover: none) and (pointer: coarse) and (max-height: 460px) {
+  .touch-pad button {
+    width: 58px;
+    height: 58px;
+    font-size: 18px;
+  }
+  .touch-pad button.small {
+    width: 50px;
+    height: 50px;
+  }
+}
+.touch-pad > div {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+.touch-pad button {
+  pointer-events: auto;
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  font-size: 22px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  color: #333;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.touch-pad button small {
+  font-size: 10px;
+}
+.touch-pad button.small {
+  width: 58px;
+  height: 58px;
+  font-size: 18px;
+}
+.touch-pad button.on {
+  background: rgba(255, 200, 120, 0.85);
+}
