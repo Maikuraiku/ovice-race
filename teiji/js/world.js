@@ -36,6 +36,7 @@ const World = (() => {
       chaser: S.chaser ? { x: -9999, y: 200, tx: -9999, ty: 200, active: false, wait: 3, stun: 0, vx: 0, warned: false } : null,
       time: S.time, clock: 0,
     };
+    Gimmicks.build(W, S);
     S.enemies.forEach(e => W.enemies.push(makeEnemy(W, e.type, e.c * TILE + TILE / 2, (e.r + 1) * TILE)));
     S.pipes.forEach(p => {
       if (!p.phone) return;
@@ -83,7 +84,29 @@ const World = (() => {
         return true;
       }
     }
+    return hitSolidX(W, e, dx);
+  }
+
+  // ギミックの壁（時間で出たり消えたりする）。動く前から重なっていたものは無視する（はさまって動けなくならないように）
+  //  pl: 操作しているプレイヤーだけがぶつかる / gate: 社員証を持っていれば通れる
+  const passes = (s, e) => !s.on || s.h <= 0 || (s.pl && !e.pl) || (s.gate && e.card);
+  function hitSolidX(W, e, dx) {
+    const L = W.gsolids;
+    if (!L || !L.length) return false;
+    for (const s of L) {
+      if (passes(s, e) || e.y + e.h <= s.y + 0.5 || e.y >= s.y + s.h - 0.5) continue;
+      const px = e.x - dx;
+      if (px < s.x + s.w && px + e.w > s.x) continue;
+      if (e.x < s.x + s.w && e.x + e.w > s.x) {
+        e.x = dx > 0 ? s.x - e.w - 0.001 : s.x + s.w + 0.001;
+        return true;
+      }
+    }
     return false;
+  }
+  // 上からだけ乗れる足場に着地したか
+  function landOn(e, l, w, prevBottom) {
+    return e.x + e.w > l.x + 2 && e.x < l.x + w - 2 && prevBottom <= Math.max(l.y + Math.max(0, l.dy), l.y - l.dy) + 1 && e.y + e.h >= l.y;
   }
 
   // 縦移動。着地したら landed、頭をぶつけたら bonk（いちばん近いブロック 1 つ）を返す
@@ -103,13 +126,33 @@ const World = (() => {
           return out;
         }
       }
+      if (W.gsolids) {
+        for (const s of W.gsolids) {
+          if (passes(s, e) || e.x + e.w <= s.x + 0.5 || e.x >= s.x + s.w - 0.5) continue;
+          if (prevBottom <= s.y + 0.5 && e.y + e.h >= s.y) {
+            e.y = s.y - e.h;
+            out.landed = true;
+            return out;
+          }
+        }
+      }
       // 動く足場（上からだけ乗れる）
       for (const l of W.lifts) {
-        if (e.x + e.w > l.x + 2 && e.x < l.x + LIFT_W - 2 && prevBottom <= l.y + Math.max(0, l.dy) + 1 && e.y + e.h >= l.y) {
+        if (landOn(e, l, LIFT_W, prevBottom)) {
           e.y = l.y - e.h;
           out.landed = true;
           out.lift = l;
           return out;
+        }
+      }
+      if (W.gplats) {
+        for (const l of W.gplats) {
+          if (!l.off && landOn(e, l, l.w, prevBottom)) {
+            e.y = l.y - e.h;
+            out.landed = true;
+            out.lift = l;
+            return out;
+          }
         }
       }
     } else {
@@ -126,6 +169,15 @@ const World = (() => {
       if (best) {
         e.y = (r + 1) * TILE;
         out.bonk = best;
+      } else if (W.gsolids) {
+        for (const s of W.gsolids) {
+          if (passes(s, e) || e.x + e.w <= s.x + 0.5 || e.x >= s.x + s.w - 0.5) continue;
+          if (prevTop >= s.y + s.h - 0.5 && e.y < s.y + s.h) {
+            e.y = s.y + s.h;
+            out.bonkRect = true;
+            break;
+          }
+        }
       }
     }
     return out;

@@ -26,6 +26,13 @@
     spam: ['迷惑メールを開いてしまった…', '「当選しました」を信じてしまった…'],
     phone: ['電話に出てしまった…（長電話）', '「ちょっといい？」の電話に捕まった…'],
     shimekiri: ['締め切りに追いつかれた…', '締め切りは待ってくれなかった…'],
+    car: ['赤信号を渡ってしまった…', '急いでいても信号は守ろう…'],
+    burn: ['オーバーヒートした床でやけどした…', 'サーバーの熱にやられた…'],
+    shred: ['シュレッダーにかけられた…', '機密書類と一緒に裁断された…'],
+    file: ['落ちてきたファイルの下敷きになった…', '重要書類の重みを知った…'],
+    laser: ['警備レーザーに見つかった…', '警報が鳴ってしまった…'],
+    snow: ['雪玉に巻き込まれた…', '雪だるまになってしまった…'],
+    pendulum: ['大時計の振り子にはじき飛ばされた…', '時間に追われて振り子に当たった…'],
     pit: ['床が抜けていた…', '書類の隙間に落ちた…'],
     time: ['定時を過ぎてしまった…'],
   };
@@ -48,6 +55,7 @@
     x: 0, y: 0, w: SIZE.small.w, h: SIZE.small.h, vx: 0, vy: 0, onGround: false, facing: 1, big: false,
     inv: 0, hurt: 0, stun: 0, dead: false, deadT: 0, deadKind: '', skip: false, anim: 0, grow: 0, growTo: false,
     coyote: 0, jumpBuf: 0, jumping: false, combo: 0, score: 0, coins: 0, safe: { x: 0, y: 0 }, cleared: false,
+    pl: true, fx: {}, card: false, stamp: 0, zip: null, gliding: false,
   };
   const others = new Map(); // pid -> { pid, name, char, st, recv, lastSeen, d }
   const localKilled = new Map(); // 協力メンバーが踏んだ敵（ホストの確定待ち）
@@ -158,6 +166,11 @@
     clear: () => seq([523, 659, 784, 1046, 0, 784, 1046, 0, 1318], 0.1, { vol: 0.04, delay: 0.35 }),
     alarm: () => { for (let i = 0; i < 6; i++) tone(i % 2 ? 988 : 1318, 0.09, { vol: 0.03, delay: i * 0.1 }); },
     hurry: () => seq([1046, 1318, 1046, 1318, 1046, 1318], 0.07, { vol: 0.03 }),
+    spring: () => tone(220, 0.25, { slide: 900, type: 'triangle', vol: 0.06 }),
+    boom: () => { noise(0.4, 0.09, 500); tone(180, 0.3, { slide: 1400, vol: 0.03 }); },
+    warp: () => seq([392, 523, 659, 784, 1046], 0.04, { vol: 0.03, type: 'triangle' }),
+    zip: () => tone(900, 0.3, { slide: 400, type: 'sawtooth', vol: 0.015 }),
+    swim: () => tone(330, 0.12, { slide: 520, type: 'sine', vol: 0.05 }),
     tick: () => tone(1500, 0.03, { vol: 0.015 }),
     fumi: () => tone(700, 0.12, { slide: 1200, vol: 0.04 }),
   };
@@ -199,6 +212,21 @@
       lead: 'G5 . A#5 G5 D6 . C6 A#5 | A5 . F5 . A5 C6 A5 . | G5 . A#5 G5 D6 . G6 F6 | D6 - - - - - - . | D#6 . D6 . C6 . A#5 . | C6 . A#5 . A5 . F5 . | G5 A5 A#5 C6 D6 C6 A#5 A5 | G5 - D5 - G5 - - .',
       bass: 'G2 G3 G2 G3 G2 G3 G2 G3 | F2 F3 F2 F3 F2 F3 F2 F3 | D#2 D#3 D#2 D#3 D#2 D#3 D#2 D#3 | D2 D3 D2 D3 D2 D3 F#2 D3 | D#2 D#3 D#2 D#3 C2 C3 C2 C3 | F2 F3 F2 F3 F2 F3 F2 F3 | D2 D3 D2 D3 D2 D3 F#2 F#3 | G2 . D2 . G2 . . .',
     },
+    festival: {
+      bpm: 168,
+      lead: 'D5 E5 G5 A5 G5 E5 D5 . | E5 G5 A5 C6 A5 G5 E5 . | D5 E5 G5 A5 C6 A5 G5 E5 | D5 - - . A4 - - . | G5 A5 C6 D6 C6 A5 G5 . | A5 G5 E5 D5 E5 G5 A5 . | G5 E5 D5 E5 G5 A5 G5 E5 | D5 - A4 - D5 - - .',
+      bass: 'D3 . A2 . D3 . A2 . | C3 . G2 . C3 . G2 . | D3 . A2 . D3 . A2 . | D3 . A2 . D3 D3 A2 . | C3 . G2 . C3 . G2 . | A2 . E3 . A2 . E3 . | C3 . G2 . C3 . A2 . | D3 . A2 . D3 . . .',
+    },
+    winter: {
+      bpm: 150,
+      lead: 'G5 E5 C5 E5 G5 . C6 . | B5 A5 G5 . E5 . G5 . | A5 F5 D5 F5 A5 . D6 . | C6 B5 A5 . G5 - - . | G5 E5 C5 E5 G5 . C6 . | B5 A5 G5 . A5 . B5 . | C6 . G5 . E5 . D5 . | C5 - - - - - - .',
+      bass: 'C3 . G2 . C3 . G2 . | E3 . B2 . E3 . B2 . | F2 . C3 . F2 . C3 . | G2 . D3 . G2 . B2 . | C3 . G2 . C3 . G2 . | E3 . B2 . A2 . E3 . | F2 . G2 . G2 . G2 . | C3 . G2 . C3 . . .',
+    },
+    final: {
+      bpm: 176,
+      lead: 'E5 . B4 E5 G5 . F#5 E5 | D5 . A4 D5 F#5 . E5 D5 | C5 . G4 C5 E5 . D5 C5 | B4 . D#5 . F#5 . B5 . | E5 . G5 B5 E6 . D6 B5 | C6 . A5 . F#5 . A5 . | G5 F#5 E5 D#5 E5 F#5 G5 A5 | B5 - - - E5 - - .',
+      bass: 'E2 E3 E2 E3 E2 E3 E2 E3 | D2 D3 D2 D3 D2 D3 D2 D3 | C2 C3 C2 C3 C2 C3 C2 C3 | B1 B2 B1 B2 B1 B2 B1 B2 | E2 E3 E2 E3 E2 E3 E2 E3 | A1 A2 A1 A2 D2 D3 D2 D3 | C2 C3 C2 C3 B1 B2 B1 B2 | E2 . B1 . E2 . . .',
+    },
   };
   const NOTE = { C: 0, 'C#': 1, D: 2, 'D#': 3, E: 4, F: 5, 'F#': 6, G: 7, 'G#': 8, A: 9, 'A#': 10, B: 11 };
   const parseTrack = s =>
@@ -213,7 +241,7 @@
   function startBgm() {
     stopBgm();
     if (!audio || soundMode !== 0 || !W) return;
-    const song = SONGS[W.S.theme];
+    const song = SONGS[W.S.theme] || SONGS[Backdrops.song(W.S.theme)] || SONGS.office;
     bgm = { song, step: 0, next: audio.currentTime + 0.1, rate: W.hurried ? 1.3 : 1, gain: audio.createGain() };
     bgm.gain.gain.value = 1;
     bgm.gain.connect(audio.destination);
@@ -261,10 +289,12 @@
     if (x != null) popup(x, y, text || '+' + n);
   }
   function gainCoin(x, y) {
-    me.coins++;
-    me.score += 200;
+    const n = me.fx.mult > 0 ? 2 : 1;
+    me.coins += n;
+    me.score += 200 * n;
     sfx.coin();
-    if (x != null) popup(x, y, '賞与+1', { size: 13, color: '#ffe082' });
+    if (x != null) popup(x, y, n > 1 ? '賞与+2（招き猫）' : '賞与+1', { size: 13, color: '#ffe082' });
+    if (n > 1 && me.coins % 100 === 1) oneUp(x, y);
     if (me.coins % 100 === 0) oneUp(x, y);
   }
   function oneUp(x, y) {
@@ -345,7 +375,7 @@
     me.y = GROUND_Y - me.h;
     Object.assign(me, {
       vx: 0, vy: 0, onGround: true, facing: 1, inv: 0, hurt: 0, stun: 0, dead: false, deadT: 0, skip: false,
-      grow: 0, coyote: 0, jumpBuf: 0, jumping: false, combo: 0, cleared: false, onLift: null,
+      grow: 0, coyote: 0, jumpBuf: 0, jumping: false, combo: 0, cleared: false, onLift: null, zip: null, gliding: false,
     });
     me.safe = { x: me.x, y: me.y };
   }
@@ -359,37 +389,79 @@
     if (me.inv > 0) me.inv -= dt;
     if (me.hurt > 0) me.hurt -= dt;
     if (me.grow > 0) me.grow -= dt;
+    Gimmicks.tick(me, dt);
+    if (me.onLift && me.onLift.off) me.onLift = null;
     if (me.onLift) { me.x += me.onLift.dx; me.y = me.onLift.y - me.h; }
+    me.gliding = false;
+    if (me.zip) {
+      // ワイヤーにつかまっている
+      if (me.jumpBuf > 0) me.jumpBuf -= dt;
+      if (!canMove) me.jumpBuf = 0;
+      Gimmicks.zipStep(me, dt);
+      interact(me.y + me.h);
+      return;
+    }
 
+    const env = Gimmicks.env(W, me);
+    const k = Gimmicks.mods(me, env);
     const dir = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
-    const max = inp.dash ? P.run : P.walk;
-    const acc = me.onGround ? (inp.dash ? P.runAccel : P.accel) : P.airAccel;
+    const max = (inp.dash ? P.run : P.walk) * k.speed;
+    const acc = (me.onGround ? (inp.dash ? P.runAccel : P.accel) : P.airAccel) * k.accel;
     if (dir) {
       const sp = me.vx * dir;
-      if (sp < 0 && me.onGround) me.vx += dir * P.skid * dt;
+      if (sp < 0 && me.onGround) me.vx += dir * P.skid * k.friction * dt;
       else if (sp < max) me.vx = Math.min(max, sp + acc * dt) * dir;
-      else if (me.onGround) me.vx = Math.max(max, sp - P.friction * dt) * dir;
+      else if (me.onGround || env.water) me.vx = Math.max(max, sp - P.friction * k.friction * dt) * dir;
       me.facing = dir;
     } else if (me.onGround) {
-      const f = P.friction * dt;
+      const f = P.friction * k.friction * dt;
       me.vx = Math.abs(me.vx) <= f ? 0 : me.vx - Math.sign(me.vx) * f;
     }
 
     me.coyote = me.onGround ? P.coyote : me.coyote - dt;
+    if (me.onGround) me.djUsed = false;
     if (me.jumpBuf > 0) me.jumpBuf -= dt;
-    if (me.jumpBuf > 0 && me.coyote > 0) {
-      me.vy = -(P.jumpV + Math.abs(me.vx) * P.runJump);
+    const jumpNow = vy => {
+      me.vy = vy;
       me.onGround = false;
       me.coyote = 0;
       me.jumpBuf = 0;
       me.jumping = true;
       me.onLift = null;
+      me.stamp = (me.stamp || 0) + 1; // 承認ハンコブロックが入れ替わる
+    };
+    if (me.jumpBuf > 0 && env.water) {
+      jumpNow(Gimmicks.swimV(me, env, P));
+      sfx.swim();
+    } else if (me.jumpBuf > 0 && me.coyote > 0) {
+      jumpNow(-(P.jumpV * k.jump + Math.abs(me.vx) * P.runJump));
       sfx.jump();
+    } else if (me.jumpBuf > 0 && me.fx.djump > 0 && !me.djUsed) {
+      // エナジーゼリー：空中でもう 1 回
+      me.djUsed = true;
+      jumpNow(-P.jumpV * 0.92 * k.jump);
+      sfx.jump();
+      W.particles.push({ kind: 'dust', x: me.x + me.w / 2, y: me.y + me.h, t: 0, life: 0.3 });
     }
-    const g = me.vy < 0 ? (inp.jump && me.jumping ? P.gravUp : P.gravCut) : P.gravDown;
-    me.vy = Math.min(P.maxFall, me.vy + g * dt);
-    if (me.vy >= 0) me.jumping = false;
+    let g = me.vy < 0 ? ((inp.jump && me.jumping) || me.boost ? P.gravUp : P.gravCut) : P.gravDown;
+    let maxFall = P.maxFall;
+    if (env.up) g = 900; // 上昇気流の中は軽くなる
+    if (env.water) {
+      g = 700;
+      maxFall = 160;
+    } else if (me.fx.glide > 0 && me.vy > 0 && inp.jump) {
+      // 日傘でふわっと降りる
+      g *= 0.3;
+      maxFall = 120;
+      me.gliding = true;
+    }
+    me.vy = Math.min(maxFall, me.vy + g * dt);
+    if (env.up) me.vy = Math.max(-340, me.vy - env.up * dt);
+    if (me.vy >= 0) me.jumping = me.boost = false;
 
+    // 風やコンベアで押し流される
+    const drift = env.wx + (me.onGround ? env.convey : 0);
+    if (drift) World.moveX(W, me, drift * dt);
     if (World.moveX(W, me, me.vx * dt)) me.vx = 0;
     const wasGround = me.onGround;
     const prevBottom = me.y + me.h;
@@ -406,10 +478,45 @@
       me.vy = 60;
       me.jumping = false;
       bonkBlock(r.bonk.c, r.bonk.r);
+    } else if (r.bonkRect) {
+      me.vy = 60;
+      me.jumping = false;
     }
+    if (r.landed) Gimmicks.landed(me, r, gapi);
     if (me.onGround && Math.abs(me.vx) > 10) me.anim += Math.abs(me.vx) * dt * 0.045;
     interact(prevBottom);
   }
+
+  // ギミックから使う操作
+  const gapi = {
+    damage: kind => damage(kind),
+    stun: (sec, text) => {
+      if (me.stun > 0 || me.hurt > 0 || me.inv > 0) return;
+      me.stun = sec;
+      me.vx *= 0.3;
+      sfx.bump();
+      if (text) toast(text, 1600);
+    },
+    sfx: n => { if (sfx[n]) sfx[n](); },
+    toast: (text, ms) => toast(text, ms),
+    popup: (x, y, text, o) => popup(x, y, text, o),
+    addScore: (n, x, y, text) => addScore(n, x, y, text),
+    input: () => input(),
+    addCoins: (n, x, y, text) => {
+      me.coins += n;
+      me.score += 200 * n;
+      sfx.coin();
+      for (let i = 0; i < Math.min(n, 12); i++) W.particles.push({ kind: 'coin', x: x + (i - 6) * 6, y, vy: -500 - i * 40, t: 0, life: 0.6 });
+      popup(x, y - 40, text, { size: 18, color: '#ffe082', life: 1.6 });
+      if (Math.floor(me.coins / 100) > Math.floor((me.coins - n) / 100)) oneUp(x, y);
+    },
+    addTime: (sec, x, y) => {
+      if (!game || game.mode === 'versus') { popup(x, y - 40, '（対戦では記念品）', { size: 13 }); return; }
+      if (isAuth()) W.time += sec;
+      else sendCoop('gtime', { s: sec });
+      popup(x, y - 40, `定時まで +${sec} 秒`, { size: 18, color: '#b3e5fc', life: 1.6 });
+    },
+  };
 
   function bonkBlock(c, r) {
     const coop = game && game.mode === 'coop';
@@ -455,6 +562,13 @@
       if (me.inv > 0) { defeat(e, 'fall'); continue; }
       if (e.type !== 'phone' && me.vy > 0 && prevBottom <= hb.y + 14) { defeat(e, 'flat'); continue; }
       if (me.hurt > 0) continue;
+      if (me.fx.board && e.type !== 'phone') {
+        me.fx.board = 0;
+        me.hurt = 0.8;
+        defeat(e, 'fall');
+        toast('スケボーではね飛ばした！（スケボーは壊れた）');
+        continue;
+      }
       damage(e.type);
       return;
     }
@@ -478,6 +592,9 @@
         }
       }
     }
+    // ギミック・アイテム
+    Gimmicks.interact(W, me, gapi);
+    if (me.dead) return;
     // ほかのプレイヤーを踏み台にする
     if (me.vy > 0) {
       for (const o of others.values()) {
@@ -552,6 +669,13 @@
 
   function damage(kind) {
     if (me.dead || me.cleared) return;
+    if (me.fx.shield) {
+      me.fx.shield = 0;
+      me.hurt = 1.5;
+      sfx.shrink();
+      toast('安全ヘルメットが守ってくれた！');
+      return;
+    }
     if (me.big) {
       setSize(false);
       me.grow = 0.6;
@@ -620,7 +744,9 @@
   function enterStage(ci, o = {}) {
     game.ci = ci;
     const idx = game.course[ci];
+    const sameStage = W && W.idx === idx && o.keepCp;
     W = World.build(idx, o.seq != null ? o.seq : ++worldSeq);
+    Gimmicks.reset(me, sameStage ? ['card', 'light'] : null);
     if (o.seq != null) worldSeq = o.seq;
     if (o.cp !== undefined) cpReached = o.cp;
     else if (!o.keepCp) cpReached = null;
@@ -1075,6 +1201,7 @@
         else if (event === 'dead') hostDead(data.k);
         else if (event === 'goal') hostClear(pid);
         else if (event === 'life') game.lives++;
+        else if (event === 'gtime') { if (isFinite(W.time)) W.time += Math.min(30, Number(data.s) || 0); }
         else if (event === 'cp') { game.teamCp = Math.max(game.teamCp == null ? -1 : game.teamCp, data.i); }
       } finally {
         remoteFx = false;
@@ -1191,6 +1318,7 @@
   function fixedStep(dt) {
     if (phase === 'title') {
       World.step(W, dt, [], cam.x + Render.view.w + 40);
+      Gimmicks.update(W, dt, null);
       return;
     }
     if (phase === 'intro' || phase === 'end') return;
@@ -1206,6 +1334,7 @@
       World.smooth(W, dt);
       if (phase === 'play' && isFinite(W.time)) W.time = Math.max(0, W.time - dt);
     }
+    Gimmicks.update(W, dt, phase === 'play' || phase === 'clear' ? me : null);
     if (phase === 'play') {
       if (me.dead) stepDead(dt);
       else stepPlayer(dt);
