@@ -12,7 +12,14 @@ const Render = (() => {
     office: { top: '#6f7a8e', ground: '#a3abbb', dark: '#8e97a9', brick: '#c96f3b', mortar: '#8a4421', hi: '#e39462', solid: '#b9c0cb', solidDark: '#7d8796', semi: '#d9a066', semiDark: '#9c6b3b' },
     basement: { top: '#6d7d9c', ground: '#4a5873', dark: '#3b465e', brick: '#4e74b8', mortar: '#2d4a80', hi: '#7499d6', solid: '#5d6780', solidDark: '#3e4659', semi: '#8b6b4a', semiDark: '#5e4630' },
     street: { top: '#d8c9ae', ground: '#5d5d68', dark: '#4b4b55', brick: '#d2763f', mortar: '#94471c', hi: '#ec9d66', solid: '#bdb7ae', solidDark: '#8e877c', semi: '#6d8fb3', semiDark: '#47658a' },
+    night: { top: '#4c566e', ground: '#6b7488', dark: '#596276', brick: '#a8583a', mortar: '#6a3218', hi: '#c97a52', solid: '#8a92a3', solidDark: '#5b6373', semi: '#b98a5a', semiDark: '#7a5531' },
+    server: { top: '#4f8fae', ground: '#2e4256', dark: '#243546', brick: '#3d8fa8', mortar: '#1f5668', hi: '#6cc3da', solid: '#5a6a7c', solidDark: '#36424f', semi: '#8796a4', semiDark: '#4d5965' },
+    rooftop: { top: '#cfcabe', ground: '#8d8a84', dark: '#77746f', brick: '#d2763f', mortar: '#94471c', hi: '#ec9d66', solid: '#bfc5c9', solidDark: '#8b9297', semi: '#7aa36b', semiDark: '#4f7445' },
+    nightstreet: { top: '#8e8aa6', ground: '#3b3a4c', dark: '#2f2e3e', brick: '#b0553a', mortar: '#6e2c18', hi: '#d47c5a', solid: '#77768c', solidDark: '#4f4e62', semi: '#c25d8a', semiDark: '#7f3a5a' },
   };
+  // 追加テーマの地形は、近いテーマの描き方を使う
+  const BASE = { night: 'office', server: 'basement', rooftop: 'street', nightstreet: 'street' };
+  let tileBase = 'office';
 
   function init(cv, urls) {
     canvas = cv;
@@ -207,6 +214,246 @@ const Render = (() => {
         ctx.lineTo(x - 8, 108);
         ctx.fill();
       }
+    } else if (theme === 'night') {
+      // 冬の 17 時：外はもう真っ暗。節電で照明は 1 本おき
+      const g = ctx.createLinearGradient(0, top, 0, bottom);
+      g.addColorStop(0, '#2c3040');
+      g.addColorStop(1, '#3d4152');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, top, w, bottom - top);
+      const P = 340, off = (camX * 0.75) % P;
+      for (let i = -1; i < w / P + 1; i++) {
+        const n = Math.floor((camX * 0.75) / P) + i;
+        const x = i * P - off + 50;
+        ctx.fillStyle = '#23262f';
+        ctx.fillRect(x - 8, 62, 256, 236);
+        const sky = ctx.createLinearGradient(0, 70, 0, 290);
+        sky.addColorStop(0, '#070b1e');
+        sky.addColorStop(1, '#2a2850');
+        ctx.fillStyle = sky;
+        ctx.fillRect(x, 70, 240, 220);
+        for (let b = 0; b < 6; b++) {
+          const bh = 40 + hash(n * 7 + b) * 110, bw = 30 + hash(n * 5 + b) * 20;
+          const bx = x + b * 40, by = 290 - bh;
+          ctx.fillStyle = '#151a2c';
+          ctx.fillRect(bx, by, bw, bh);
+          // 残業中の窓あかり
+          ctx.fillStyle = '#ffd97a';
+          for (let wy = by + 6; wy < 282; wy += 12)
+            for (let wx = bx + 4; wx < bx + bw - 6; wx += 8)
+              if (hash(n * 131 + b * 17 + wx * 0.37 + wy * 1.3) > 0.62) ctx.fillRect(wx, wy, 4, 5);
+        }
+        ctx.fillStyle = '#23262f';
+        ctx.fillRect(x + 116, 70, 8, 220);
+        ctx.fillRect(x, 176, 240, 6);
+        ctx.fillStyle = 'rgba(160,180,220,0.07)';
+        ctx.fillRect(x, 70, 240, 220);
+      }
+      ctx.fillStyle = '#262934';
+      ctx.fillRect(0, top, w, 40 - top);
+      const L = 260, loff = (camX * 0.9) % L;
+      for (let i = -1; i < w / L + 1; i++) {
+        const n = Math.floor((camX * 0.9) / L) + i;
+        const x = i * L - loff;
+        const on = (n & 1) === 0;
+        if (on) {
+          const cone = ctx.createLinearGradient(0, 42, 0, GROUND_Y);
+          cone.addColorStop(0, 'rgba(255,250,220,0.16)');
+          cone.addColorStop(1, 'rgba(255,250,220,0)');
+          ctx.fillStyle = cone;
+          ctx.beginPath();
+          ctx.moveTo(x + 60, 42);
+          ctx.lineTo(x + 180, 42);
+          ctx.lineTo(x + 240, GROUND_Y);
+          ctx.lineTo(x, GROUND_Y);
+          ctx.fill();
+        }
+        ctx.fillStyle = on ? '#fffbe8' : '#4a4d58';
+        ctx.fillRect(x + 60, 34, 120, 8);
+      }
+      const D = 620, doff = (camX * 0.55) % D;
+      if (canFilter) ctx.filter = 'brightness(0.55) saturate(0.7)';
+      for (let i = -1; i < w / D + 1; i++) spr('office', i * D - doff + 260, GROUND_Y - 14, 180, { alpha: 0.6 });
+      if (canFilter) ctx.filter = 'none';
+      ctx.fillStyle = '#343846';
+      ctx.fillRect(0, GROUND_Y - 12, w, 12);
+    } else if (theme === 'server') {
+      // サーバールーム：ラックが並び、ランプが点滅する
+      const g = ctx.createLinearGradient(0, top, 0, bottom);
+      g.addColorStop(0, '#08121c');
+      g.addColorStop(1, '#10222f');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, top, w, bottom - top);
+      const P2 = 120, off2 = (camX * 0.3) % P2;
+      ctx.fillStyle = '#0d1a25';
+      for (let i = -1; i < w / P2 + 1; i++) ctx.fillRect(i * P2 - off2, 120, 100, GROUND_Y - 120);
+      const P = 190, off = (camX * 0.55) % P;
+      const LED = ['#3dff8a', '#ffb43d', '#4dc3ff', '#3dff8a'];
+      for (let i = -1; i < w / P + 1; i++) {
+        const n = Math.floor((camX * 0.55) / P) + i;
+        const x = i * P - off + 20;
+        ctx.fillStyle = '#2a3a48';
+        ctx.fillRect(x - 4, 76, 148, GROUND_Y - 76);
+        ctx.fillStyle = '#16232f';
+        ctx.fillRect(x, 82, 140, GROUND_Y - 82);
+        for (let u = 0; u < 15; u++) {
+          const y = 92 + u * 25;
+          ctx.fillStyle = u % 4 === 3 ? '#1b2a37' : '#22323f';
+          ctx.fillRect(x + 8, y, 124, 19);
+          for (let k = 0; k < 3; k++) {
+            const h = hash(n * 97 + u * 13 + k * 7);
+            const on = Math.sin(t * (2 + h * 9) + h * 40) > -0.3;
+            ctx.fillStyle = on ? LED[Math.floor(h * 4)] : '#1d3a2c';
+            ctx.fillRect(x + 16 + k * 9, y + 7, 4, 4);
+          }
+          ctx.fillStyle = '#2c3f4f';
+          ctx.fillRect(x + 60, y + 6, 64, 2);
+          ctx.fillRect(x + 60, y + 11, 64, 2);
+        }
+      }
+      ctx.fillStyle = '#1a2733';
+      ctx.fillRect(0, top, w, 52 - top);
+      const L = 360, loff = (camX * 0.8) % L;
+      for (let i = -1; i < w / L + 1; i++) {
+        const x = i * L - loff + 150;
+        const glow = ctx.createRadialGradient(x, 60, 4, x, 60, 220);
+        glow.addColorStop(0, 'rgba(120,200,255,0.22)');
+        glow.addColorStop(1, 'rgba(120,200,255,0)');
+        ctx.fillStyle = glow;
+        ctx.fillRect(x - 220, 0, 440, 300);
+        ctx.fillStyle = '#bfe6ff';
+        ctx.fillRect(x - 50, 52, 100, 5);
+      }
+    } else if (theme === 'rooftop') {
+      // 屋上：午後の空、遠くのビル群、給水塔とフェンス
+      const g = ctx.createLinearGradient(0, top, 0, GROUND_Y);
+      g.addColorStop(0, '#4f9fdc');
+      g.addColorStop(0.55, '#9fd2ef');
+      g.addColorStop(1, '#ffe3bd');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, top, w, bottom - top);
+      const sx = w * 0.78 - camX * 0.03;
+      const sun = ctx.createRadialGradient(sx, 130, 8, sx, 130, 150);
+      sun.addColorStop(0, 'rgba(255,255,235,1)');
+      sun.addColorStop(0.2, 'rgba(255,245,200,0.8)');
+      sun.addColorStop(1, 'rgba(255,240,200,0)');
+      ctx.fillStyle = sun;
+      ctx.fillRect(sx - 150, -20, 300, 300);
+      const C = 640, coff = (camX * 0.1) % C;
+      for (let i = -1; i < w / C + 1; i++) {
+        const n = Math.floor((camX * 0.1) / C) + i;
+        spr('kumo', i * C - coff + 120 + hash(n) * 240, 110 + hash(n + 3) * 90, 130 + hash(n + 5) * 60, { alpha: 0.9 });
+      }
+      for (const [k, col, base, hmax, bw0] of [[0.18, '#a9c3da', 110, 170, 40], [0.32, '#86a5c0', 40, 120, 54]]) {
+        const P = 400, off = (camX * k) % P;
+        for (let i = -1; i < w / P + 1; i++) {
+          const n = Math.floor((camX * k) / P) + i;
+          for (let b = 0; b < 7; b++) {
+            const bh = base + hash(n * 11 + b * 3 + k * 100) * hmax, bw = bw0 + hash(n * 7 + b + k * 50) * 24;
+            const bx = i * P - off + b * 58;
+            ctx.fillStyle = col;
+            ctx.fillRect(bx, GROUND_Y - 60 - bh, bw, bh + 60);
+            ctx.fillStyle = 'rgba(255,255,255,0.18)';
+            for (let wy = GROUND_Y - 52 - bh; wy < GROUND_Y - 60; wy += 14) ctx.fillRect(bx + 4, wy, bw - 8, 3);
+          }
+        }
+      }
+      const Q = 900, qoff = (camX * 0.6) % Q;
+      for (let i = -1; i < w / Q + 1; i++) {
+        const x = i * Q - qoff + 300;
+        ctx.fillStyle = '#9aa3ab';
+        ctx.fillRect(x - 40, GROUND_Y - 150, 6, 150);
+        ctx.fillRect(x + 34, GROUND_Y - 150, 6, 150);
+        ctx.fillStyle = '#c9d0d6';
+        ctx.fillRect(x - 46, GROUND_Y - 230, 92, 84);
+        ctx.fillStyle = '#aeb6bd';
+        ctx.fillRect(x - 46, GROUND_Y - 200, 92, 6);
+        ctx.fillStyle = '#7d868e';
+        ctx.fillRect(x + 120, GROUND_Y - 260, 3, 260);
+        ctx.fillRect(x + 108, GROUND_Y - 230, 27, 3);
+        ctx.fillRect(x + 112, GROUND_Y - 200, 19, 3);
+      }
+      const F = 36, foff = (camX * 0.85) % F;
+      ctx.fillStyle = 'rgba(70,110,90,0.55)';
+      ctx.fillRect(0, GROUND_Y - 96, w, 5);
+      ctx.fillRect(0, GROUND_Y - 40, w, 3);
+      for (let i = -1; i < w / F + 1; i++) ctx.fillRect(i * F - foff, GROUND_Y - 96, 3, 96);
+      ctx.strokeStyle = 'rgba(70,110,90,0.25)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      const moff = (camX * 0.85) % 12;
+      for (let i = -4; i < w / 12 + 4; i++) {
+        const x = i * 12 - moff;
+        ctx.moveTo(x, GROUND_Y - 91);
+        ctx.lineTo(x + 51, GROUND_Y - 40);
+        ctx.moveTo(x + 51, GROUND_Y - 91);
+        ctx.lineTo(x, GROUND_Y - 40);
+      }
+      ctx.stroke();
+    } else if (theme === 'nightstreet') {
+      // 冬の夜の繁華街：星、月、ネオン看板
+      const g = ctx.createLinearGradient(0, top, 0, GROUND_Y);
+      g.addColorStop(0, '#070a22');
+      g.addColorStop(0.6, '#1d1d4a');
+      g.addColorStop(1, '#5a2d5e');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, top, w, bottom - top);
+      ctx.fillStyle = '#fff';
+      const span = w + 200;
+      for (let i = 0; i < 70; i++) {
+        const x = ((((hash(i) * 3000 - camX * 0.02) % span) + span) % span) - 100;
+        const y = top + 10 + hash(i + 70) * 260;
+        ctx.globalAlpha = 0.4 + 0.6 * Math.abs(Math.sin(t * (0.5 + hash(i + 140)) + i));
+        ctx.fillRect(x, y, 2, 2);
+      }
+      ctx.globalAlpha = 1;
+      const mx = w * 0.22 - camX * 0.03, my = 120;
+      const moon = ctx.createRadialGradient(mx, my, 20, mx, my, 120);
+      moon.addColorStop(0, 'rgba(255,246,216,0.35)');
+      moon.addColorStop(1, 'rgba(255,246,216,0)');
+      ctx.fillStyle = moon;
+      ctx.fillRect(mx - 120, my - 120, 240, 240);
+      ctx.fillStyle = '#fff6d8';
+      ctx.beginPath();
+      ctx.arc(mx, my, 26, 0, Math.PI * 2);
+      ctx.fill();
+      if (img.town && img.town.naturalWidth) {
+        const th = 320, tw = (th * img.town.naturalWidth) / img.town.naturalHeight;
+        const toff = (camX * 0.3) % tw;
+        if (canFilter) ctx.filter = 'brightness(0.45) saturate(0.8)';
+        for (let i = -1; i < w / tw + 1; i++) ctx.drawImage(img.town, i * tw - toff, GROUND_Y - th, tw + 1, th);
+        if (canFilter) ctx.filter = 'none';
+        const tint = ctx.createLinearGradient(0, GROUND_Y - th, 0, GROUND_Y);
+        tint.addColorStop(0, 'rgba(30,30,90,0.45)');
+        tint.addColorStop(1, 'rgba(80,30,90,0.35)');
+        ctx.fillStyle = tint;
+        ctx.fillRect(0, GROUND_Y - th, w, th);
+      }
+      const SIGNS = ['居酒屋', 'カラオケ', 'ラーメン', '焼鳥', 'BAR', '24H'];
+      const NEON = ['#ff4fa3', '#4ff0ff', '#ffe14f', '#7dff6a', '#c77dff'];
+      const P = 460, off = (camX * 0.45) % P;
+      for (let i = -1; i < w / P + 1; i++) {
+        const n = Math.floor((camX * 0.45) / P) + i;
+        const m = ((n % 30) + 30) % 30;
+        const x = i * P - off + 80 + (m % 3) * 60;
+        const y = 230 + ((m * 7) % 4) * 28;
+        const col = NEON[m % NEON.length];
+        const text = SIGNS[(m * 7) % SIGNS.length];
+        ctx.globalAlpha = Math.sin(t * 17 + n * 3) > -0.95 ? 1 : 0.35; // たまにちらつく
+        const glow = ctx.createRadialGradient(x, y, 4, x, y, 90);
+        glow.addColorStop(0, col + '55');
+        glow.addColorStop(1, col + '00');
+        ctx.fillStyle = glow;
+        ctx.fillRect(x - 90, y - 90, 180, 180);
+        rrect(x - 52, y - 18, 104, 36, 8);
+        ctx.fillStyle = 'rgba(10,8,20,0.85)';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = col;
+        ctx.stroke();
+        outlinedText(text, x, y + 1, 20, col, 'rgba(0,0,0,0.6)');
+        ctx.globalAlpha = 1;
+      }
     } else {
       const g = ctx.createLinearGradient(0, top, 0, GROUND_Y);
       g.addColorStop(0, '#2f2f60');
@@ -250,18 +497,18 @@ const Render = (() => {
         ctx.fillRect(x, y, TILE + 0.6, TILE + 0.6);
         if (above !== T.GROUND) {
           ctx.fillStyle = pal.top;
-          ctx.fillRect(x, y, TILE + 0.6, W.S.theme === 'street' ? 16 : 7);
-          if (W.S.theme === 'street') {
+          ctx.fillRect(x, y, TILE + 0.6, tileBase === 'street' ? 16 : 7);
+          if (tileBase === 'street') {
             ctx.fillStyle = 'rgba(0,0,0,0.12)';
             ctx.fillRect(x + TILE - 2, y, 2, 16);
             ctx.fillRect(x, y + 14, TILE, 2);
           }
         }
-        if (W.S.theme === 'basement') {
+        if (tileBase === 'basement') {
           ctx.fillStyle = 'rgba(0,0,0,0.18)';
           ctx.fillRect(x, y + TILE - 2, TILE, 2);
           ctx.fillRect(x + ((r % 2) ? 0 : TILE / 2), y, 2, TILE);
-        } else if (W.S.theme === 'office' && above !== T.GROUND) {
+        } else if (tileBase === 'office' && above !== T.GROUND) {
           ctx.fillStyle = 'rgba(255,255,255,0.12)';
           ctx.fillRect(x + 4, y + 12, TILE - 8, 3);
         }
@@ -313,7 +560,7 @@ const Render = (() => {
         ctx.fillRect(x, y, TILE, TILE);
         ctx.fillStyle = pal.solid;
         ctx.fillRect(x + 2, y + 2, TILE - 4, TILE - 4);
-        if (W.S.theme === 'office' && r > 1) {
+        if (tileBase === 'office' && r > 1) {
           // キャビネット
           ctx.fillStyle = pal.solidDark;
           ctx.fillRect(x + 4, y + TILE / 2 - 1, TILE - 8, 2);
@@ -337,8 +584,8 @@ const Render = (() => {
         const right = c < W.w - 1 ? W.tiles[r * W.w + c + 1] : T.EMPTY;
         if (below === T.EMPTY) {
           ctx.fillStyle = pal.semiDark;
-          if (left !== T.SEMI) ctx.fillRect(x + 4, y + 12, 4, W.S.theme === 'street' ? 26 : 20);
-          if (right !== T.SEMI) ctx.fillRect(x + TILE - 8, y + 12, 4, W.S.theme === 'street' ? 26 : 20);
+          if (left !== T.SEMI) ctx.fillRect(x + 4, y + 12, 4, tileBase === 'street' ? 26 : 20);
+          if (right !== T.SEMI) ctx.fillRect(x + TILE - 8, y + 12, 4, tileBase === 'street' ? 26 : 20);
         }
         break;
       }
@@ -501,6 +748,7 @@ const Render = (() => {
     ctx.setTransform(k, 0, 0, k, -camX * k, view.offY * dpr);
     const camL = camX, camR = camX + view.w;
     const pal = PAL[W.S.theme];
+    tileBase = BASE[W.S.theme] || W.S.theme;
 
     // 中間地点・タイムカード・飾り
     W.checkpoints.forEach((x, i) => {

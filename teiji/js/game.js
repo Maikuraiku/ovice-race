@@ -57,7 +57,12 @@
   let cpReached = null;
   let introUntil = 0, clearT = 0, clearBy = null, bonusLeft = 0, bonusRate = 0;
   let worldSeq = 0;
-  let courseSel = load('ovice-teiji:course') || 'all';
+  // コース：'all'（全ステージ） / 'w2'（ワールド 2 を通しで） / '5'（6 番目のステージだけ）
+  const validSel = v =>
+    v === 'all' ||
+    (/^w\d+$/.test(v || '') && Levels.worldStages(Number(v.slice(1))).length > 0) ||
+    (/^\d+$/.test(v || '') && Number(v) < Levels.count);
+  let courseSel = validSel(load('ovice-teiji:course2')) ? load('ovice-teiji:course2') : 'w1';
   let partyMode = load('ovice-teiji:mode') === 'versus' ? 'versus' : 'coop';
   const cam = { x: 0 };
 
@@ -71,8 +76,30 @@
     }
     return COLORS[hash(pid || '') % COLORS.length];
   }
-  const courseList = sel => (sel === 'all' ? [0, 1, 2] : [Number(sel)]);
-  const courseLabel = sel => (sel === 'all' ? '全ステージ' : Levels.info(Number(sel)).id + ' ' + Levels.info(Number(sel)).name);
+  const courseList = sel =>
+    sel === 'all' ? Levels.meta.map(m => m.idx) : /^w\d+$/.test(sel) ? Levels.worldStages(Number(sel.slice(1))) : [Number(sel)];
+  const worldName = n => `ワールド${n}「${Levels.WORLDS[n - 1] || ''}」`;
+  const courseLabel = sel => {
+    if (sel === 'all') return `全ステージ（${Levels.count}）`;
+    if (/^w\d+$/.test(sel)) return worldName(Number(sel.slice(1)));
+    const m = Levels.info(Number(sel));
+    return m ? m.id + ' ' + m.name : '';
+  };
+  const courseInfo = sel => {
+    if (sel === 'all') return `全 ${Levels.count} ステージを通しで遊びます（長いです）`;
+    if (/^w\d+$/.test(sel)) {
+      const st = Levels.worldStages(Number(sel.slice(1))).map(i => Levels.info(i));
+      return `${courseLabel(sel)}　${st[0].id}〜${st[st.length - 1].id} の ${st.length} ステージを通しで`;
+    }
+    const m = Levels.info(Number(sel));
+    return m ? `${m.id} ${m.name}（${worldName(m.world)}）` : '';
+  };
+  const worldOfSel = sel => {
+    if (sel === 'all') return 0;
+    if (/^w\d+$/.test(sel)) return Number(sel.slice(1));
+    const m = Levels.info(Number(sel));
+    return m ? m.world : 1;
+  };
 
   // ---------- サウンド ----------
   let audio = null;
@@ -151,6 +178,26 @@
       bpm: 164,
       lead: 'D5 F#5 A5 F#5 G5 B5 A5 . | F#5 A5 D6 C#6 B5 A5 F#5 . | G5 G5 B5 G5 F#5 F#5 A5 F#5 | E5 F#5 G5 E5 A5 - - . | D5 F#5 A5 F#5 G5 B5 A5 . | F#5 A5 D6 C#6 B5 A5 B5 C#6 | D6 C#6 B5 A5 G5 F#5 E5 F#5 | D5 - A4 - D5 - - .',
       bass: 'D3 . A3 . D3 . A3 . | B2 . F#3 . B2 . F#3 . | G2 . D3 . G2 . D3 . | A2 . E3 . A2 . C#3 . | D3 . A3 . D3 . A3 . | B2 . F#3 . B2 . F#3 . | G2 . A2 . G2 . A2 . | D3 . A2 . D3 . . .',
+    },
+    night: {
+      bpm: 138,
+      lead: 'D5 . F5 . A5 . G5 F5 | E5 . C5 . E5 - - . | D5 . F5 . A5 . D6 C6 | A5 - - - - - - . | A#5 . A5 . G5 . F5 . | E5 . F5 . G5 . A5 . | D5 . F5 . E5 . C#5 . | D5 - - - - - - .',
+      bass: 'D3 . A2 . D3 . A2 . | C3 . G2 . C3 . G2 . | D3 . A2 . D3 . A2 . | F2 . C3 . F2 . C3 . | A#2 . F2 . A#2 . F2 . | C3 . G2 . C3 . G2 . | A2 . E2 . A2 . C#3 . | D3 . A2 . D3 . . .',
+    },
+    server: {
+      bpm: 150,
+      lead: 'E5 G5 B5 G5 E5 G5 B5 G5 | D5 F#5 A5 F#5 D5 F#5 A5 F#5 | C5 E5 G5 E5 C5 E5 G5 E5 | B4 D#5 F#5 D#5 B4 D#5 F#5 B5 | E5 G5 B5 E6 D6 B5 G5 B5 | D5 F#5 A5 D6 C6 A5 F#5 A5 | C5 E5 G5 C6 B5 G5 E5 G5 | B4 D#5 F#5 B5 E5 - - .',
+      bass: 'E2 . E3 . E2 . E3 . | D2 . D3 . D2 . D3 . | C2 . C3 . C2 . C3 . | B1 . B2 . B1 . B2 . | E2 . E3 . E2 . E3 . | D2 . D3 . D2 . D3 . | C2 . C3 . C2 . C3 . | B1 . B2 . E2 . . .',
+    },
+    rooftop: {
+      bpm: 156,
+      lead: 'C5 . F5 . A5 . C6 . | A#5 . A5 . G5 . F5 . | G5 . A5 . A#5 . D6 . | C6 - - - A5 - - . | D6 . C6 . A#5 . A5 . | G5 . A5 . A#5 . C6 . | A5 . G5 . F5 . E5 . | F5 - - - - - - .',
+      bass: 'F2 . C3 . F2 . C3 . | A#2 . F3 . A#2 . F3 . | G2 . D3 . G2 . D3 . | C3 . G2 . C3 . E3 . | A#2 . F3 . A#2 . F3 . | G2 . D3 . C3 . G2 . | D3 . A2 . C3 . G2 . | F2 . C3 . F2 . . .',
+    },
+    nightstreet: {
+      bpm: 170,
+      lead: 'G5 . A#5 G5 D6 . C6 A#5 | A5 . F5 . A5 C6 A5 . | G5 . A#5 G5 D6 . G6 F6 | D6 - - - - - - . | D#6 . D6 . C6 . A#5 . | C6 . A#5 . A5 . F5 . | G5 A5 A#5 C6 D6 C6 A#5 A5 | G5 - D5 - G5 - - .',
+      bass: 'G2 G3 G2 G3 G2 G3 G2 G3 | F2 F3 F2 F3 F2 F3 F2 F3 | D#2 D#3 D#2 D#3 D#2 D#3 D#2 D#3 | D2 D3 D2 D3 D2 D3 F#2 D3 | D#2 D#3 D#2 D#3 C2 C3 C2 C3 | F2 F3 F2 F3 F2 F3 F2 F3 | D2 D3 D2 D3 D2 D3 F#2 F#3 | G2 . D2 . G2 . . .',
     },
   };
   const NOTE = { C: 0, 'C#': 1, D: 2, 'D#': 3, E: 4, F: 5, 'F#': 6, G: 7, 'G#': 8, A: 9, 'A#': 10, B: 11 };
@@ -713,7 +760,8 @@
   // ---------- 終わり ----------
   function soloEnding() {
     const s = me.score;
-    const title = s >= 40000 ? '伝説の定時ハンター' : s >= 20000 ? '定時退社のプロ' : s >= 8000 ? 'できる会社員' : 'がんばった会社員';
+    const per = (s / Math.max(1, game.course.length)) * 3; // 3 ステージあたりに換算
+    const title = per >= 40000 ? '伝説の定時ハンター' : per >= 20000 ? '定時退社のプロ' : per >= 8000 ? 'できる会社員' : 'がんばった会社員';
     showEnd({
       title: '🎉 定時退社 成功！',
       art: 'skip_' + me.char,
@@ -1214,7 +1262,7 @@
 
   function renderIntro(countdown) {
     const info = W.S;
-    setText($('introWorld'), 'WORLD ' + info.id);
+    setText($('introWorld'), 'WORLD ' + info.id + '　' + (Levels.WORLDS[Number(info.id.split('-')[0]) - 1] || ''));
     setText($('introName'), info.name);
     setText($('introMemo'), info.memo);
     Render.spriteToCanvas($('introChar'), 'player_' + me.char, 70, true);
@@ -1313,19 +1361,57 @@
     b.addEventListener('click', () => { setChar(b.dataset.char); b.blur(); });
   });
   setChar(me.char);
+  // ワールドのボタン（季節のアイコン付き）と、選んだワールドのステージのボタン
+  const WORLD_ICON = ['🏢', '🌸', '🌻', '🍁', '⛄', '📊'];
+  {
+    const row = $('worldRow');
+    Levels.WORLDS.forEach((name, i) => {
+      const b = document.createElement('button');
+      b.dataset.world = i + 1;
+      b.textContent = `${WORLD_ICON[i] || ''} ${i + 1}`;
+      b.title = name;
+      row.appendChild(b);
+    });
+    const all = document.createElement('button');
+    all.dataset.course = 'all';
+    all.textContent = '全ステージ';
+    row.appendChild(all);
+  }
+  function renderCourse(sel, locked) {
+    const wn = worldOfSel(sel);
+    document.querySelectorAll('[data-world]').forEach(b => b.classList.toggle('sel', Number(b.dataset.world) === wn));
+    const row = $('stageRow');
+    row.classList.toggle('hidden', !wn);
+    if (wn && row.dataset.world !== String(wn)) {
+      row.dataset.world = wn;
+      row.querySelectorAll('button').forEach(b => b.remove());
+      const add = (v, text, title) => {
+        const b = document.createElement('button');
+        b.dataset.course = v;
+        b.textContent = text;
+        if (title) b.title = title;
+        row.appendChild(b);
+      };
+      add('w' + wn, '通しで遊ぶ');
+      Levels.worldStages(wn).forEach(i => add(String(i), Levels.info(i).id, Levels.info(i).name));
+    }
+    document.querySelectorAll('[data-course]').forEach(b => { b.classList.toggle('sel', b.dataset.course === sel); b.disabled = !!locked; });
+    document.querySelectorAll('[data-world]').forEach(b => (b.disabled = !!locked));
+    setText($('courseInfo'), courseInfo(sel));
+  }
   function setCourse(v, persist = true) {
     courseSel = v;
-    if (persist) save('ovice-teiji:course', v);
-    document.querySelectorAll('[data-course]').forEach(b => b.classList.toggle('sel', b.dataset.course === v));
+    if (persist) save('ovice-teiji:course2', v);
+    renderCourse(v, false);
     lastSend = 0;
   }
-  document.querySelectorAll('[data-course]').forEach(b =>
-    b.addEventListener('click', () => {
-      b.blur();
-      if (Party.state !== 'none' && !Party.isHost) return;
-      setCourse(b.dataset.course);
-    })
-  );
+  ui.lobby.addEventListener('click', e => {
+    const b = e.target.closest('[data-course],[data-world]');
+    if (!b) return;
+    b.blur();
+    if (Party.state !== 'none' && !Party.isHost) return;
+    setCourse(b.dataset.world ? 'w' + b.dataset.world : b.dataset.course);
+  });
   setCourse(courseSel, false);
   function setPartyMode(m) {
     partyMode = m;
@@ -1373,11 +1459,11 @@
     ui.soloBtn.classList.toggle('hidden', inP);
     $('createBtn').disabled = $('joinBtn').disabled = !me.pid;
     const locked = inP && !Party.isHost;
-    document.querySelectorAll('[data-course],[data-mode]').forEach(b => (b.disabled = locked));
-    if (locked && hostSel.course) {
-      document.querySelectorAll('[data-course]').forEach(b => b.classList.toggle('sel', b.dataset.course === hostSel.course));
+    document.querySelectorAll('[data-mode]').forEach(b => (b.disabled = locked));
+    if (locked && hostSel.course && validSel(hostSel.course)) {
+      renderCourse(hostSel.course, true);
       document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('sel', b.dataset.mode === hostSel.mode));
-    }
+    } else renderCourse(courseSel, locked);
     $('modeRow').classList.toggle('hidden', !inP);
     ui.lobbyNote.classList.toggle('error', !inP && !!partyError);
 

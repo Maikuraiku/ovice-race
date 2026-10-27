@@ -7,7 +7,7 @@
     <script>
       // oVice が古いページを覚えていても、新しい版があれば一度だけ読み直す
       (function () {
-        var CURRENT = '2026.10.21-1';
+        var CURRENT = '2026.10.27-1';
         try {
           fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
             .then(function (r) { return r.json(); })
@@ -24,7 +24,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="style.css?v=2026.10.21-1" />
+    <link rel="stylesheet" href="style.css?v=2026.10.27-1" />
   </head>
   <body>
     <canvas id="game"></canvas>
@@ -54,13 +54,13 @@
         <button data-char="m"><canvas></canvas><span>会社員（男性）</span></button>
         <button data-char="f"><canvas></canvas><span>会社員（女性）</span></button>
       </div>
-      <div class="row">
-        <span class="label">コース</span>
-        <button data-course="0">1-1</button>
-        <button data-course="1">1-2</button>
-        <button data-course="2">1-3</button>
-        <button data-course="all">全ステージ</button>
+      <div id="worldRow" class="row">
+        <span class="label">ワールド</span>
       </div>
+      <div id="stageRow" class="row">
+        <span class="label">コース</span>
+      </div>
+      <div id="courseInfo" class="course-info"></div>
       <div id="modeRow" class="row hidden">
         <span class="label">遊び方</span>
         <button data-mode="coop">🤝 協力プレイ</button>
@@ -125,12 +125,12 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-    <script src="js/net.js?v=2026.10.21-1"></script>
-    <script src="js/party.js?v=2026.10.21-1"></script>
-    <script src="js/atlas.js?v=2026.10.21-1"></script>
-    <script src="js/levels.js?v=2026.10.21-1"></script>
-    <script src="js/world.js?v=2026.10.21-1"></script>
-    <script src="js/render.js?v=2026.10.21-1"></script>
-    <script src="js/game.js?v=2026.10.21-1"></script>
+    <script src="js/net.js?v=2026.10.27-1"></script>
+    <script src="js/party.js?v=2026.10.27-1"></script>
+    <script src="js/atlas.js?v=2026.10.27-1"></script>
+    <script src="js/levels.js?v=2026.10.27-1"></script>
+    <script src="js/world.js?v=2026.10.27-1"></script>
+    <script src="js/render.js?v=2026.10.27-1"></script>
+    <script src="js/game.js?v=2026.10.27-1"></script>
   </body>
 </html>

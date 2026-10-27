@@ -109,6 +109,16 @@ button.primary:hover {
 .row.center {
   justify-content: center;
 }
+#worldRow button {
+  padding: 5px 10px;
+}
+.course-info {
+  margin: -2px 0 6px calc(4em + 6px);
+  min-height: 1.3em;
+  font-size: 12px;
+  font-weight: 700;
+  color: #a08a68;
+}
 .label {
   min-width: 4em;
   font-size: 13px;
